@@ -20,6 +20,7 @@ PULL_OUTPUT=$(git -C "$REPO" fetch origin main 2>&1; git -C "$REPO" rebase --aut
 PULL_EXIT=$?
 if [ $PULL_EXIT -ne 0 ]; then
   git -C "$REPO" rebase --abort > /dev/null 2>&1
+  rm -rf "$REPO/.git/rebase-merge" "$REPO/.git/rebase-apply"
   PULL_FAILED=true
 fi
 

@@ -22,6 +22,7 @@ rm "$MSG_FILE"
 # On conflict: abort rebase, skip push, write session_error.log for next session_start to handle
 if ! { git -C "$REPO" fetch origin main > /dev/null 2>&1 && git -C "$REPO" rebase --autostash origin/main > /dev/null 2>&1; }; then
   git -C "$REPO" rebase --abort > /dev/null 2>&1
+  rm -rf "$REPO/.git/rebase-merge" "$REPO/.git/rebase-apply"
   echo "Push skipped: pull --rebase failed before push. Local commits not pushed to remote." > "$ERROR_LOG"
   exit 0
 fi
