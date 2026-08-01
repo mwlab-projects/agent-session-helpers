@@ -10,15 +10,11 @@ Agis en tant que gestionnaire de fin de session de travail.
 
 # CONTEXTE D'UTILISATION
 
-À lancer à la demande de l'utilisateur après une tâche de dev. Claude doit proposer
-de le lancer ("On lance `session_save` ?") sans l'invoquer automatiquement.
+À lancer à la demande de l'utilisateur après une tâche de dev.
 
 # OBJECTIF
 
-1. Vérifier et mettre à jour `TODO.md` et `ARCHITECTURE.md` si la session a un impact
-2. Évaluer si `CLAUDE.md` doit être mis à jour (règles permanentes)
-3. Mettre à jour `CHANGELOG.md` (section `[Unreleased]`)
-4. Préparer le commit (le hook `Stop` se charge du commit + push)
+Mettre à jour les fichiers contexte impactés par les modifications de la session courante et préparer le commit.
 
 # CONTRAINTES
 
