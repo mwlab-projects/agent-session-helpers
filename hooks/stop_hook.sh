@@ -27,6 +27,18 @@ if ! { git -C "$REPO" fetch origin main > /dev/null 2>&1 && git -C "$REPO" rebas
   exit 0
 fi
 
+# rebase --autostash exits 0 even when the final autostash re-application conflicts
+# (the rebase itself succeeded; only the stash pop is conflicted). Detect that separately —
+# never leave unmerged (UU) content in the working tree. The stash is left untouched so
+# nothing is lost. The session's own commit above already happened and is unaffected — this
+# only guards against leftover uncommitted state outside the normal commit flow.
+CONFLICTED=$(git -C "$REPO" diff --name-only --diff-filter=U)
+if [ -n "$CONFLICTED" ]; then
+  git -C "$REPO" reset --hard HEAD > /dev/null 2>&1
+  echo "Push skipped: rebase succeeded but autostash re-application conflicted on: $CONFLICTED. Pending state preserved in 'git stash list' (not dropped). Local commits not pushed to remote. Resolve manually next session." > "$ERROR_LOG"
+  exit 0
+fi
+
 # Push
 git -C "$REPO" push > /dev/null 2>&1
 
