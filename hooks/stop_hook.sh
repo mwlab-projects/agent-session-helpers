@@ -28,13 +28,14 @@ else
   echo "Commit scope not applied: $FILES_LIST not found, falling back to git add -A for this commit (not a sync conflict — check why the skill didn't write it)." >> "$ERROR_LOG"
 fi
 
-# Nothing staged (e.g. session touched no local file) — skip the commit
+# Nothing staged (e.g. session touched no local file) — commit anyway with --allow-empty so the
+# session's summary still lands in git log (history lives entirely in commit messages here).
+# Never risks pulling in unrelated changes: an empty commit stages nothing.
 if git -C "$REPO" diff --cached --quiet; then
-  rm -f "$MSG_FILE"
-  exit 0
+  git -C "$REPO" commit --allow-empty -F "$MSG_FILE"
+else
+  git -C "$REPO" commit -F "$MSG_FILE"
 fi
-
-git -C "$REPO" commit -F "$MSG_FILE"
 
 # Delete the message file right after commit — prevents double-commit if push fails later
 rm "$MSG_FILE"
