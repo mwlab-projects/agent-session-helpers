@@ -1,6 +1,6 @@
 ---
 name: session_save
-description: Sauvegarde de session de travail — vérifie TODO.md/ARCHITECTURE.md/CLAUDE.md, met à jour CHANGELOG.md (Unreleased), commit+push via le hook Stop. À proposer après chaque tâche de dev, ne pas invoquer automatiquement.
+description: Sauvegarde de session de travail — vérifie TODO.md/ARCHITECTURE.md/CLAUDE.md, met à jour CHANGELOG.md (Unreleased), consolide le scope de commit à la session courante, commit+push via le hook Stop. À proposer après chaque tâche de dev, ne pas invoquer automatiquement.
 allowed-tools: Read, Write, Edit, Bash, Glob
 ---
 
@@ -40,16 +40,21 @@ Mettre à jour les fichiers contexte impactés par les modifications de la sessi
      - Si réponse non affirmative ou absente → arrêter immédiatement sans rien
        modifier
 
-   Cette confirmation vaut validation pour les étapes 1, 2, 4 et 5 (mise à jour du
-   CHANGELOG et commit+push automatique via le hook `Stop`). L'étape 3 (CLAUDE.md)
-   nécessite sa propre confirmation séparée.
+   Cette confirmation vaut validation pour les étapes 1, 2, 4, 5 et 6 (mise à jour du
+   CHANGELOG, consolidation du scope de commit et commit+push automatique via le hook
+   `Stop`). L'étape 3 (CLAUDE.md) nécessite sa propre confirmation séparée.
 
 ## Étape 1 — Vérification TODO.md
 
-1. Identifier les tâches/bugs de `TODO.md` concernés par les changements de la
+1. Identifier les fichiers locaux modifiés pendant la session à partir du contexte
+   de conversation, en excluant `TODO.md`, `ARCHITECTURE.md`, `CLAUDE.md` et
+   `CHANGELOG.md` (mis à jour conditionnellement par les étapes suivantes de ce
+   skill — traités séparément à l'étape de consolidation du scope de commit)
+
+2. Identifier les tâches/bugs de `TODO.md` concernés par les changements de la
    session (`git diff`, contexte de conversation)
 
-2. Mettre à jour directement les éléments qui ne nécessitent pas de validation
+3. Mettre à jour directement les éléments qui ne nécessitent pas de validation
    utilisateur :
    - Hypothèses et analyses enrichies pendant la session
    - Colonne "Prochaine action" si elle a évolué
@@ -61,7 +66,7 @@ Mettre à jour les fichiers contexte impactés par les modifications de la sessi
      courante (l'utilisateur a confirmé que ça marche) : retirer directement
      la ligne du tableau, sans reposer la question
 
-3. Pour le sujet précis traité pendant la session courante (le fix/la feature
+4. Pour le sujet précis traité pendant la session courante (le fix/la feature
    qui vient d'être fait) : ne mettre à jour `TODO.md` sur ce sujet que si
    l'utilisateur a confirmé explicitement s'il est clos ou encore en cours. Si
    cette confirmation est déjà dans la conversation, l'appliquer directement
@@ -75,10 +80,10 @@ Mettre à jour les fichiers contexte impactés par les modifications de la sessi
 
 ## Étape 2 — Vérification ARCHITECTURE.md
 
-4. Identifier si la session a modifié l'architecture du projet : nouveau
+5. Identifier si la session a modifié l'architecture du projet : nouveau
    composant/service, nouvelle dépendance externe, nouveau pattern d'extension
 
-5. Si oui → mettre à jour la section concernée pour refléter l'état actuel, en
+6. Si oui → mettre à jour la section concernée pour refléter l'état actuel, en
    1-3 lignes par composant touché, éditée en place (jamais en ajout de
    paragraphe) — sans historique, sans date, sans mention de ce qui a changé
 
@@ -96,11 +101,11 @@ Mettre à jour les fichiers contexte impactés par les modifications de la sessi
    commentaire de code à cet endroit, pas dans ARCHITECTURE.md. Point — pas
    d'entrée doc en plus, pas de mention à l'utilisateur.
 
-6. Si non → ne rien faire
+7. Si non → ne rien faire
 
 ## Étape 3 — Proposition de mise à jour CLAUDE.md
 
-7. Évaluer si la session révèle qu'une règle permanente devrait être ajoutée ou
+8. Évaluer si la session révèle qu'une règle permanente devrait être ajoutée ou
    mise à jour dans `CLAUDE.md`. Ne proposer que si les 3 conditions suivantes
    sont TOUTES réunies :
    - Ça a réellement coûté du temps cette session (plusieurs allers-retours,
@@ -123,7 +128,7 @@ Mettre à jour les fichiers contexte impactés par les modifications de la sessi
      associée ("X est toujours vrai") → `ARCHITECTURE.md`, pas `CLAUDE.md`
      (`CLAUDE.md` dit quoi faire, pas ce qui est)
 
-8. Si au moins un élément qualifie : afficher une proposition avec justification et
+9. Si au moins un élément qualifie : afficher une proposition avec justification et
    attendre la confirmation de l'utilisateur — séparée du gate de l'étape 0
    - Si confirmé → modifier `CLAUDE.md` en conséquence, en respectant
      strictement le format ci-dessous
@@ -144,23 +149,54 @@ Mettre à jour les fichiers contexte impactés par les modifications de la sessi
    - Valeur de tuning précise (délai ms, seuil px, couleur) sauf si l'ignorer
      casserait silencieusement un autre composant
 
-   Ce récit va dans le message de commit de cette session (étape 5), jamais
+   Ce récit va dans le message de commit de cette session (étape 6), jamais
    dans `CLAUDE.md`.
 
 ## Étape 4 — Mise à jour CHANGELOG.md
 
-9. Lire `CHANGELOG.md`
+10. Lire `CHANGELOG.md`
 
-10. Sous `## [Unreleased]`, ajouter les entrées de la session catégorisées au format
+11. Sous `## [Unreleased]`, ajouter les entrées de la session catégorisées au format
     Keep a Changelog (`### Added`, `### Changed`, `### Fixed`, `### Removed`,
     etc. — créer la sous-section si elle n'existe pas encore)
 
-11. Bullets concis, orientés utilisateur final (pas de détails d'implémentation
+12. Bullets concis, orientés utilisateur final (pas de détails d'implémentation
     internes type noms de fonctions/fichiers)
 
-## Étape 5 — Message de commit
+## Étape 5 — Consolidation du scope de commit
 
-12. Écrire avec l'outil **Write** (pas Bash) dans `.claude/session_commit_msg.txt` :
+13. Construire la liste des fichiers locaux modifiés par CETTE session : fusion des
+    fichiers identifiés à l'étape 1 avec tout fichier de doc effectivement édité par
+    le skill lui-même aux étapes 2 à 4 (`TODO.md`, `ARCHITECTURE.md`, `CLAUDE.md`,
+    `CHANGELOG.md`) et tout autre fichier local édité en session dont tu as
+    connaissance.
+
+14. Exécuter `git status --porcelain | cut -c4- | tr -d '"'` (Bash) pour obtenir les
+    chemins modifiés/non trackés, un par ligne, sans code de statut ni guillemets.
+    Comparer avec la liste de l'étape 13 :
+    - Si tous les chemins obtenus sont couverts par la liste → passer à l'étape 15
+      sans rien demander
+    - Si des chemins apparaissent en dehors de la liste (probable session parallèle
+      en cours) → les présenter à l'utilisateur (liste numérotée, langage non
+      technique) pour demander s'ils doivent être intégrés à la sauvegarde. Exemple :
+      ```
+      D'autres fichiers modifiés ont été détectés en dehors de cette session,
+      probablement une autre session en cours :
+      1) `Sources/Foo.swift`
+      2) `CHANGELOG.md`
+
+      Je les inclus dans la sauvegarde ?
+      ```
+      Attendre une réponse. Sans confirmation explicite, ne jamais les inclure.
+
+15. Écrire la liste finale (fichiers de l'étape 13 + fichiers confirmés à l'étape 14)
+    dans `session_commit_files.txt` (racine du repo), un chemin par ligne, avec
+    l'outil **Write**.
+
+## Étape 6 — Message de commit
+
+16. Écrire avec l'outil **Write** (pas Bash) dans `session_commit_msg.txt` (racine
+    du repo) :
     - Ligne 1 : `type: résumé court` au format Conventional Commits, cohérent avec
       l'historique du repo (`fix:`, `feat:`, `docs:`, `chore:`, etc.) — déterminer
       le type dominant à partir des changements de code de la session ; si la
@@ -170,12 +206,13 @@ Mettre à jour les fichiers contexte impactés par les modifications de la sessi
       mention des fichiers doc mis à jour (TODO.md/ARCHITECTURE.md/CLAUDE.md si
       modifiés)
     - ⛔ Ne pas exécuter `git add`, `git commit` ou `git push` — le hook `Stop` s'en
-      charge automatiquement
+      charge automatiquement, en se limitant aux fichiers listés dans
+      `session_commit_files.txt` écrit à l'étape 15
     - Afficher : "Session sauvegardée 👍"
 
-## Étape 6 — Definition of Done
+## Étape 7 — Definition of Done
 
-13. Valider chaque point, corriger immédiatement tout point non respecté :
+17. Valider chaque point, corriger immédiatement tout point non respecté :
     - `TODO.md` à jour (hors statuts "résolu" en attente de confirmation séparée),
       aucune ligne "Issues connues"/tâche laissée ouverte pour le sujet de la
       session sans confirmation explicite de l'utilisateur sur son statut
@@ -183,4 +220,7 @@ Mettre à jour les fichiers contexte impactés par les modifications de la sessi
     - `CLAUDE.md` mis à jour uniquement si l'utilisateur a confirmé la proposition
       de l'étape 3
     - `CHANGELOG.md` `[Unreleased]` contient les entrées de la session
-    - `.claude/session_commit_msg.txt` écrit
+    - La liste des fichiers de commit a été consolidée (étapes 13-14) et les
+      fichiers hors session, le cas échéant, soumis à confirmation avant inclusion
+    - `session_commit_files.txt` et `session_commit_msg.txt` écrits (racine du
+      repo — le hook se charge du reste)

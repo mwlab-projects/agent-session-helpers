@@ -4,14 +4,36 @@
 
 REPO=$(git rev-parse --show-toplevel 2>/dev/null)
 MSG_FILE="$REPO/session_commit_msg.txt"
+FILES_LIST="$REPO/session_commit_files.txt"
 
 # Skip if not in a git repo or no commit message queued
 [ -n "$REPO" ] && [ -f "$MSG_FILE" ] || exit 0
 
 ERROR_LOG="$REPO/session_error.log"
 
-# Stage all changes and commit using the queued message
-git -C "$REPO" add -A
+# Stage only the files the session identified as its own (written by session_save)
+# — never a blanket `git add -A`, which would sweep up other concurrent sessions' in-progress
+# work sharing the same working tree.
+if [ -f "$FILES_LIST" ]; then
+  while IFS= read -r f; do
+    [ -n "$f" ] && git -C "$REPO" add -- "$f"
+  done < "$FILES_LIST"
+  rm "$FILES_LIST"
+else
+  # Abnormal case: the skill is supposed to always write this file alongside the commit
+  # message. Falling back to `git add -A` (old behavior) rather than skipping the commit
+  # entirely — this hook can run unsupervised, and never committing would leave changes
+  # unsynced indefinitely with nobody around to notice the error log.
+  git -C "$REPO" add -A
+  echo "Commit scope not applied: $FILES_LIST not found, falling back to git add -A for this commit (not a sync conflict — check why the skill didn't write it)." >> "$ERROR_LOG"
+fi
+
+# Nothing staged (e.g. session touched no local file) — skip the commit
+if git -C "$REPO" diff --cached --quiet; then
+  rm -f "$MSG_FILE"
+  exit 0
+fi
+
 git -C "$REPO" commit -F "$MSG_FILE"
 
 # Delete the message file right after commit — prevents double-commit if push fails later

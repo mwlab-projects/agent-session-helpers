@@ -9,7 +9,7 @@ Un ensemble de hooks et de skills qui connectent Claude Code au workflow git de 
 | Composant | Rôle |
 |---|---|
 | `hooks/session_start_hook.sh` | Sync git auto au démarrage + injection d'un fichier de contexte (CHANGELOG.md par défaut) |
-| `hooks/stop_hook.sh` | Commit + push auto en fin de session (si `session_save` a été lancé) |
+| `hooks/stop_hook.sh` | Commit + push auto en fin de session (si `session_save` a été lancé), en ne stageant que les fichiers identifiés par le skill comme modifiés dans cette session |
 | `skills/session_save/` | Skill de fin de session : met à jour TODO.md / ARCHITECTURE.md / CLAUDE.md / CHANGELOG.md, puis écrit le message de commit |
 | `skills/session_handoff/` | Crée un fichier handoff autonome pour passer la main à un autre agent ou une autre session |
 
@@ -145,7 +145,8 @@ Crée `.claude/settings.local.json` avec les permissions adaptées au stack du p
       "Bash(chmod:*)",
       "WebSearch",
       "WebFetch",
-      "Write(session_commit_msg.txt)"
+      "Write(session_commit_msg.txt)",
+      "Write(session_commit_files.txt)"
     ]
   }
 }
@@ -155,10 +156,10 @@ Adapte la liste à ton stack (remplace `npm` par `cargo`, `go`, `python`, etc. s
 
 ### Étape 7 — Commiter tout
 
-Ajoute `session_commit_msg.txt` au `.gitignore` — ce fichier est le déclencheur temporaire du hook Stop, il ne doit pas être versionné :
+Ajoute `session_commit_msg.txt` et `session_commit_files.txt` au `.gitignore` — ces fichiers sont les déclencheurs temporaires du hook Stop, ils ne doivent pas être versionnés :
 
 ```bash
-echo "session_commit_msg.txt" >> .gitignore
+printf "session_commit_msg.txt\nsession_commit_files.txt\n" >> .gitignore
 git add CLAUDE.md ARCHITECTURE.md TODO.md CHANGELOG.md .gitignore .claude/settings.json .claude/hooks/ .claude/skills/
 git commit -m "chore: add Claude Code session management (agent-session-helpers)"
 git push
@@ -188,7 +189,8 @@ Se lance en fin de session de travail. Demande confirmation, puis :
 2. Met à jour `ARCHITECTURE.md` (si l'architecture a changé)
 3. Propose des mises à jour de `CLAUDE.md` (règles permanentes, confirmation requise)
 4. Ajoute les entrées de la session dans `CHANGELOG.md [Unreleased]`
-5. Écrit `session_commit_msg.txt` — le hook Stop le récupère et commite
+5. Consolide le scope de commit : liste les fichiers modifiés par cette session précise, demande confirmation pour tout fichier détecté hors scope (probable session parallèle), écrit `session_commit_files.txt`
+6. Écrit `session_commit_msg.txt` — le hook Stop récupère les deux fichiers, ne stage que les fichiers listés (jamais un `git add -A` aveugle) et commite
 
 ### `/session_handoff`
 
