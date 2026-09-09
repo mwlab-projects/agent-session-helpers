@@ -1,5 +1,5 @@
 #!/bin/bash
-# Stop hook — runs automatically at the end of each Claude Code session
+# Stop hook — runs automatically at the end of each Agent session
 # Commits and pushes changes if a commit message file exists
 
 REPO=$(git rev-parse --show-toplevel 2>/dev/null)
@@ -15,10 +15,35 @@ ERROR_LOG="$REPO/session_error.log"
 # — never a blanket `git add -A`, which would sweep up other concurrent sessions' in-progress
 # work sharing the same working tree.
 if [ -f "$FILES_LIST" ]; then
+  FAILED=""
   while IFS= read -r f; do
-    [ -n "$f" ] && git -C "$REPO" add -- "$f"
+    if [ -n "$f" ]; then
+      # Capture stderr into a variable instead of redirecting straight to $ERROR_LOG:
+      # a `2>>"$ERROR_LOG"` redirection opens (and thus creates) the file on every call,
+      # even when git add succeeds and writes nothing — that alone would produce a spurious
+      # empty session_error.log and falsely trip the "sync error" alert at next session start.
+      ADD_ERR=$(git -C "$REPO" add -- "$f" 2>&1 >/dev/null)
+      if [ $? -ne 0 ]; then
+        # The old side of a `git mv` (rename) is already fully staged as a deletion by the time
+        # this loop runs, so `git add -- <old path>` always fails with the exact same "pathspec
+        # did not match any files" as a genuine bogus/typo path — nothing is actually wrong here.
+        # Only treat it as a real failure when the path never existed in HEAD either (true bogus
+        # path): a path that existed in HEAD but is no longer in the index is an already-handled
+        # rename, not an error.
+        if git -C "$REPO" cat-file -e "HEAD:$f" 2>/dev/null && ! git -C "$REPO" ls-files --error-unmatch -- "$f" >/dev/null 2>&1; then
+          : # benign — already-staged deletion, nothing to do
+        else
+          FAILED="${FAILED}${f}: ${ADD_ERR}"$'\n'
+        fi
+      fi
+    fi
   done < "$FILES_LIST"
   rm "$FILES_LIST"
+  # Never fail silently: a malformed path (e.g. a future regression in how the skill lists
+  # files) must surface via session_error.log instead of just being dropped from the commit.
+  if [ -n "$FAILED" ]; then
+    printf "git add a échoué pour ces chemins (non inclus dans le commit) :\n%s" "$FAILED" >> "$ERROR_LOG"
+  fi
 else
   # Abnormal case: the skill is supposed to always write this file alongside the commit
   # message. Falling back to `git add -A` (old behavior) rather than skipping the commit

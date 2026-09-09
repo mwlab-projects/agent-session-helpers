@@ -1,5 +1,5 @@
 #!/bin/bash
-# SessionStart hook — runs automatically at the beginning of each new Claude Code session
+# SessionStart hook — runs automatically at the beginning of each new Agent session
 # Syncs the repo with origin/main and injects a context file into Claude's context
 
 REPO=$(git rev-parse --show-toplevel 2>/dev/null)

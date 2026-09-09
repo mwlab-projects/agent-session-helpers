@@ -171,8 +171,10 @@ Mettre à jour les fichiers contexte impactés par les modifications de la sessi
     `CHANGELOG.md`) et tout autre fichier local édité en session dont tu as
     connaissance.
 
-14. Exécuter `git status --porcelain | cut -c4- | tr -d '"'` (Bash) pour obtenir les
-    chemins modifiés/non trackés, un par ligne, sans code de statut ni guillemets.
+14. Exécuter `git status --porcelain=v1 --no-renames -z | while IFS= read -r -d '' entry; do printf '%s\n' "${entry:3}"; done`
+    (Bash) pour obtenir les chemins modifiés/non trackés, un par ligne, sans code de statut ni
+    échappement (`--no-renames` + `-z` évitent respectivement la fusion `ancien -> nouveau` sur
+    une seule ligne et l'échappement octal des noms de fichiers accentués).
     Comparer avec la liste de l'étape 13 :
     - Si tous les chemins obtenus sont couverts par la liste → passer à l'étape 15
       sans rien demander
