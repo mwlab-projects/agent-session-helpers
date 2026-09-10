@@ -68,9 +68,17 @@ rm "$MSG_FILE"
 # Pull with rebase before pushing to handle cases where remote has advanced
 # --autostash: stashes any uncommitted changes before rebasing, restores them after
 # On conflict: abort rebase, skip push, write session_error.log for next session_start to handle
-if ! { git -C "$REPO" fetch origin main > /dev/null 2>&1 && git -C "$REPO" rebase --autostash origin/main > /dev/null 2>&1; }; then
-  git -C "$REPO" rebase --abort > /dev/null 2>&1
-  rm -rf "$REPO/.git/rebase-merge" "$REPO/.git/rebase-apply"
+if git -C "$REPO" fetch origin main > /dev/null 2>&1; then
+  if git -C "$REPO" merge-base --is-ancestor origin/main HEAD 2>/dev/null; then
+    : # origin/main already fully contained in HEAD — nothing to integrate, skip rebase --autostash
+      # entirely. Avoids stashing/popping the whole working tree for no reason on every push.
+  elif ! git -C "$REPO" rebase --autostash origin/main > /dev/null 2>&1; then
+    git -C "$REPO" rebase --abort > /dev/null 2>&1
+    rm -rf "$REPO/.git/rebase-merge" "$REPO/.git/rebase-apply"
+    echo "Push skipped: pull --rebase failed before push. Local commits not pushed to remote." > "$ERROR_LOG"
+    exit 0
+  fi
+else
   echo "Push skipped: pull --rebase failed before push. Local commits not pushed to remote." > "$ERROR_LOG"
   exit 0
 fi

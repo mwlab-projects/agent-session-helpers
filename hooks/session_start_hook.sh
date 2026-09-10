@@ -16,8 +16,19 @@ CONTEXT_FILE="$REPO/CHANGELOG.md"
 
 # Attempt to pull. On conflict: abort rebase cleanly.
 PULL_FAILED=false
-PULL_OUTPUT=$(git -C "$REPO" fetch origin main 2>&1; git -C "$REPO" rebase --autostash origin/main 2>&1)
-PULL_EXIT=$?
+FETCH_OUTPUT=$(git -C "$REPO" fetch origin main 2>&1)
+if git -C "$REPO" merge-base --is-ancestor origin/main HEAD 2>/dev/null; then
+  # origin/main is already fully contained in local HEAD: nothing to rebase.
+  # Skip --autostash entirely — it stashes/pops the whole working tree unconditionally,
+  # even when the rebase itself would be a no-op.
+  PULL_OUTPUT="$FETCH_OUTPUT"
+  PULL_EXIT=0
+else
+  REBASE_OUTPUT=$(git -C "$REPO" rebase --autostash origin/main 2>&1)
+  PULL_EXIT=$?
+  PULL_OUTPUT="$FETCH_OUTPUT
+$REBASE_OUTPUT"
+fi
 if [ $PULL_EXIT -ne 0 ]; then
   git -C "$REPO" rebase --abort > /dev/null 2>&1
   rm -rf "$REPO/.git/rebase-merge" "$REPO/.git/rebase-apply"
