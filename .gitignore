@@ -1,0 +1,4 @@
+# Transient session-save files (Stop hook working files + sync error log)
+session_error.log
+session_commit_msg.txt
+session_commit_files.txt
