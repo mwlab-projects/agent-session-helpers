@@ -1,6 +1,6 @@
 ---
 name: session_save
-description: Sauvegarde de session de travail — vérifie TODO.md/ARCHITECTURE.md/CLAUDE.md, met à jour CHANGELOG.md (Unreleased), consolide le scope de commit à la session courante, commit+push via le hook Stop. À proposer après chaque tâche de dev, ne pas invoquer automatiquement.
+description: Sauvegarde de session de travail — vérifie TODO.md/ARCHITECTURE.md/AGENTS.md, met à jour CHANGELOG.md (Unreleased), consolide le scope de commit à la session courante, commit+push via le hook Stop. À proposer après chaque tâche de dev, ne pas invoquer automatiquement.
 allowed-tools: Read, Write, Edit, Bash, Glob
 ---
 
@@ -27,7 +27,7 @@ Mettre à jour les fichiers contexte impactés par les modifications de la sessi
   confirmé si ce sujet est clos ou encore en cours — sans cette confirmation
   précise dans la conversation, poser la question (étape 1) au lieu de deviner
   ou d'ajouter une ligne "à valider" par précaution
-- Ne jamais modifier CLAUDE.md sans confirmation séparée de l'utilisateur
+- Ne jamais modifier AGENTS.md sans confirmation séparée de l'utilisateur
 
 # INSTRUCTIONS
 
@@ -42,12 +42,12 @@ Mettre à jour les fichiers contexte impactés par les modifications de la sessi
 
    Cette confirmation vaut validation pour les étapes 1, 2, 4, 5 et 6 (mise à jour du
    CHANGELOG, consolidation du scope de commit et commit+push automatique via le hook
-   `Stop`). L'étape 3 (CLAUDE.md) nécessite sa propre confirmation séparée.
+   `Stop`). L'étape 3 (AGENTS.md) nécessite sa propre confirmation séparée.
 
 ## Étape 1 — Vérification TODO.md
 
 1. Identifier les fichiers locaux modifiés pendant la session à partir du contexte
-   de conversation, en excluant `TODO.md`, `ARCHITECTURE.md`, `CLAUDE.md` et
+   de conversation, en excluant `TODO.md`, `ARCHITECTURE.md`, `AGENTS.md` et
    `CHANGELOG.md` (mis à jour conditionnellement par les étapes suivantes de ce
    skill — traités séparément à l'étape de consolidation du scope de commit)
 
@@ -103,10 +103,10 @@ Mettre à jour les fichiers contexte impactés par les modifications de la sessi
 
 7. Si non → ne rien faire
 
-## Étape 3 — Proposition de mise à jour CLAUDE.md
+## Étape 3 — Proposition de mise à jour AGENTS.md
 
 8. Évaluer si la session révèle qu'une règle permanente devrait être ajoutée ou
-   mise à jour dans `CLAUDE.md`. Ne proposer que si les 3 conditions suivantes
+   mise à jour dans `AGENTS.md`. Ne proposer que si les 3 conditions suivantes
    sont TOUTES réunies :
    - Ça a réellement coûté du temps cette session (plusieurs allers-retours,
      un bug difficile à tracer) — pas juste "bon à savoir en passant"
@@ -114,7 +114,7 @@ Mettre à jour les fichiers contexte impactés par les modifications de la sessi
      une session future — pas un détail qu'on retrouverait en 30 secondes en
      relisant la doc officielle de l'outil/l'API au moment voulu (ex : un
      paramètre d'API tierce isolé ne qualifie pas à lui seul)
-   - Ce n'est pas déjà couvert, même implicitement, ailleurs dans `CLAUDE.md`
+   - Ce n'est pas déjà couvert, même implicitement, ailleurs dans `AGENTS.md`
      — que ce soit une règle existante ou un fait déjà énoncé dans une autre
      section
 
@@ -125,20 +125,20 @@ Mettre à jour les fichiers contexte impactés par les modifications de la sessi
    - Une astuce d'API tierce sans impact architectural direct et récurrent sur
      ce projet
    - Un fait/une propriété d'architecture sans consigne de comportement
-     associée ("X est toujours vrai") → `ARCHITECTURE.md`, pas `CLAUDE.md`
-     (`CLAUDE.md` dit quoi faire, pas ce qui est)
+     associée ("X est toujours vrai") → `ARCHITECTURE.md`, pas `AGENTS.md`
+     (`AGENTS.md` dit quoi faire, pas ce qui est)
 
 9. Si au moins un élément qualifie : afficher une proposition avec justification et
    attendre la confirmation de l'utilisateur — séparée du gate de l'étape 0
-   - Si confirmé → modifier `CLAUDE.md` en conséquence, en respectant
+   - Si confirmé → modifier `AGENTS.md` en conséquence, en respectant
      strictement le format ci-dessous
    - Si non confirmé ou pas de réponse → ne rien modifier
 
-   **Format obligatoire de toute puce ajoutée à `CLAUDE.md`** — gabarit à
+   **Format obligatoire de toute puce ajoutée à `AGENTS.md`** — gabarit à
    suivre : `**Titre court**` : ce qu'il faut faire/éviter — pourquoi
    (mécanisme technique général, pas l'incident précis).
 
-   ⚠️ CLAUDE.md n'est pas un journal de bord : une puce n'énonce QUE la règle
+   ⚠️ AGENTS.md n'est pas un journal de bord : une puce n'énonce QUE la règle
    et son mécanisme, jamais l'aventure qui a mené à la découvrir. Ne jamais
    inclure :
    - Récit de bug/diagnostic ou étapes de découverte ("vécu :", "constaté
@@ -150,7 +150,7 @@ Mettre à jour les fichiers contexte impactés par les modifications de la sessi
      casserait silencieusement un autre composant
 
    Ce récit va dans le message de commit de cette session (étape 6), jamais
-   dans `CLAUDE.md`.
+   dans `AGENTS.md`.
 
 ## Étape 4 — Mise à jour CHANGELOG.md
 
@@ -167,7 +167,7 @@ Mettre à jour les fichiers contexte impactés par les modifications de la sessi
 
 13. Construire la liste des fichiers locaux modifiés par CETTE session : fusion des
     fichiers identifiés à l'étape 1 avec tout fichier de doc effectivement édité par
-    le skill lui-même aux étapes 2 à 4 (`TODO.md`, `ARCHITECTURE.md`, `CLAUDE.md`,
+    le skill lui-même aux étapes 2 à 4 (`TODO.md`, `ARCHITECTURE.md`, `AGENTS.md`,
     `CHANGELOG.md`) et tout autre fichier local édité en session dont tu as
     connaissance.
 
@@ -205,7 +205,7 @@ Mettre à jour les fichiers contexte impactés par les modifications de la sessi
       session n'a touché que la documentation → `docs:`
     - Ligne 2 : vide (séparateur git titre/corps)
     - Ligne 3+ : bullets reprenant les entrées ajoutées au CHANGELOG, plus une
-      mention des fichiers doc mis à jour (TODO.md/ARCHITECTURE.md/CLAUDE.md si
+      mention des fichiers doc mis à jour (TODO.md/ARCHITECTURE.md/AGENTS.md si
       modifiés)
     - ⛔ Ne pas exécuter `git add`, `git commit` ou `git push` — le hook `Stop` s'en
       charge automatiquement, en se limitant aux fichiers listés dans
@@ -219,7 +219,7 @@ Mettre à jour les fichiers contexte impactés par les modifications de la sessi
       aucune ligne "Issues connues"/tâche laissée ouverte pour le sujet de la
       session sans confirmation explicite de l'utilisateur sur son statut
     - `ARCHITECTURE.md` à jour si un changement d'architecture a été identifié
-    - `CLAUDE.md` mis à jour uniquement si l'utilisateur a confirmé la proposition
+    - `AGENTS.md` mis à jour uniquement si l'utilisateur a confirmé la proposition
       de l'étape 3
     - `CHANGELOG.md` `[Unreleased]` contient les entrées de la session
     - La liste des fichiers de commit a été consolidée (étapes 13-14) et les

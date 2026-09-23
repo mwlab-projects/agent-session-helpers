@@ -10,7 +10,7 @@ Un ensemble de hooks et de skills qui connectent Claude Code au workflow git de 
 |---|---|
 | `hooks/session_start_hook.sh` | Sync git auto au démarrage + injection d'un fichier de contexte (CHANGELOG.md par défaut) |
 | `hooks/stop_hook.sh` | Commit + push auto en fin de session (si `session_save` a été lancé), en ne stageant que les fichiers identifiés par le skill comme modifiés dans cette session |
-| `skills/session_save/` | Skill de fin de session : met à jour TODO.md / ARCHITECTURE.md / CLAUDE.md / CHANGELOG.md, puis écrit le message de commit |
+| `skills/session_save/` | Skill de fin de session : met à jour TODO.md / ARCHITECTURE.md / AGENTS.md / CHANGELOG.md, puis écrit le message de commit |
 | `skills/session_handoff/` | Crée un fichier handoff autonome pour passer la main à un autre agent ou une autre session |
 
 **Pourquoi :** Claude Code repart de zéro à chaque session — sans mémoire de ce qui a été fait avant. Ce système injecte automatiquement le contexte du projet au démarrage, maintient les fichiers de documentation à jour via `/session_save`, et commit + push en fin de session sans intervention manuelle.
@@ -68,8 +68,8 @@ Récupère et écris :
 
 Ces fichiers sont le socle du système de session. Génère leur contenu en fonction du projet courant.
 
-**`CLAUDE.md`** — Instructions projet pour Claude Code. Doit inclure :
-- Une section **"Fichiers de documentation du projet"** listant CLAUDE.md, ARCHITECTURE.md, TODO.md, CHANGELOG.md
+**`AGENTS.md`** — Instructions projet pour l'agent IA. Doit inclure :
+- Une section **"Fichiers de documentation du projet"** listant AGENTS.md, ARCHITECTURE.md, TODO.md, CHANGELOG.md
 - Une section **"Cycle de session"** : hook SessionStart → travail → `/session_save` → hook Stop
 - Présentation du projet (ce que c'est, URL du repo, qui l'utilise)
 - Stack technique
@@ -160,7 +160,7 @@ Ajoute `session_commit_msg.txt` et `session_commit_files.txt` au `.gitignore` �
 
 ```bash
 printf "session_commit_msg.txt\nsession_commit_files.txt\n" >> .gitignore
-git add CLAUDE.md ARCHITECTURE.md TODO.md CHANGELOG.md .gitignore .claude/settings.json .claude/hooks/ .claude/skills/
+git add AGENTS.md ARCHITECTURE.md TODO.md CHANGELOG.md .gitignore .claude/settings.json .claude/hooks/ .claude/skills/
 git commit -m "chore: add Claude Code session management (agent-session-helpers)"
 git push
 ```
@@ -187,7 +187,7 @@ git push
 Se lance en fin de session de travail. Demande confirmation, puis :
 1. Met à jour `TODO.md` (nouvelles tâches, changements de statut avec confirmation utilisateur)
 2. Met à jour `ARCHITECTURE.md` (si l'architecture a changé)
-3. Propose des mises à jour de `CLAUDE.md` (règles permanentes, confirmation requise)
+3. Propose des mises à jour de `AGENTS.md` (règles permanentes, confirmation requise)
 4. Ajoute les entrées de la session dans `CHANGELOG.md [Unreleased]`
 5. Consolide le scope de commit : liste les fichiers modifiés par cette session précise, demande confirmation pour tout fichier détecté hors scope (probable session parallèle), écrit `session_commit_files.txt`
 6. Écrit `session_commit_msg.txt` — le hook Stop récupère les deux fichiers, ne stage que les fichiers listés (jamais un `git add -A` aveugle) et commite
