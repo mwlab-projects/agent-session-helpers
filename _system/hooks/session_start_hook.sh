@@ -70,6 +70,19 @@ else
   rm -f "$ERROR_LOG"
 fi
 
+# If session_error.log exists, inject instruction for Claude — placed before the context
+# file block below: hook stdout is capped at 10,000 chars (truncated beyond that), and this
+# alert must never be the part that gets cut off just because the context file is verbose.
+if [ -f "$ERROR_LOG" ]; then
+  echo "=== SESSION_ERROR.LOG START ==="
+  echo "⚠️ REPO SYNC ERROR DETECTED — content of session_error.log:"
+  cat "$ERROR_LOG"
+  echo ""
+  echo "Instructions: run git status, git stash list, git log --oneline -5 HEAD, git log --oneline -5 origin/main. If 'git stash list' is non-empty: run 'git stash show -p' to inspect the pending content — it holds session changes that failed to merge and were never lost. Merge it manually into the current files (never silently pick a side; check with the user if the two versions genuinely conflict in meaning), commit, push, then 'git stash drop' and delete session_error.log. If 'git stash list' is empty: attempt git pull --rebase --autostash. If resolved: git push, delete session_error.log, inform user. If failing: show diverging files, propose options, never ask user to run git commands. Start with: 'Une erreur de synchronisation du repo a été détectée. Je corrige.'"
+  echo "=== SESSION_ERROR.LOG END ==="
+  echo ""
+fi
+
 # Inject context file
 if [ -f "$CONTEXT_FILE" ]; then
   FILENAME=$(basename "$CONTEXT_FILE")
@@ -78,16 +91,6 @@ if [ -f "$CONTEXT_FILE" ]; then
   cat "$CONTEXT_FILE"
   echo "=== ${MARKER} END ==="
   echo ""
-fi
-
-# If session_error.log exists, inject instruction for Claude
-if [ -f "$ERROR_LOG" ]; then
-  echo "=== SESSION_ERROR.LOG START ==="
-  echo "⚠️ REPO SYNC ERROR DETECTED — content of session_error.log:"
-  cat "$ERROR_LOG"
-  echo ""
-  echo "Instructions: run git status, git stash list, git log --oneline -5 HEAD, git log --oneline -5 origin/main. If 'git stash list' is non-empty: run 'git stash show -p' to inspect the pending content — it holds session changes that failed to merge and were never lost. Merge it manually into the current files (never silently pick a side; check with the user if the two versions genuinely conflict in meaning), commit, push, then 'git stash drop' and delete session_error.log. If 'git stash list' is empty: attempt git pull --rebase --autostash. If resolved: git push, delete session_error.log, inform user. If failing: show diverging files, propose options, never ask user to run git commands. Start with: 'Une erreur de synchronisation du repo a été détectée. Je corrige.'"
-  echo "=== SESSION_ERROR.LOG END ==="
 fi
 
 exit 0
