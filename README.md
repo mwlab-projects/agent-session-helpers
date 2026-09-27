@@ -1,70 +1,111 @@
 # agent-session-helpers
 
-Gestion de session Claude Code pour n'importe quel projet de développement — synchronisation git automatique, commit automatique, et skills de session.
+Gestion de session (Claude Code / Codex / OpenCode) pour n'importe quel projet de développement — synchronisation git automatique, commit automatique, et skills de session.
 
 ## C'est quoi
 
-Un ensemble de hooks et de skills qui connectent Claude Code au workflow git de ton projet :
+Un ensemble de hooks et de skills qui connectent ton harnais IA (Claude Code, OpenAI Codex ou OpenCode) au workflow git de ton projet. Les 3 harnais partagent la même logique de session, portée par des scripts génériques dans `_system/` (source de vérité unique), chacun exposé via un adaptateur propre au harnais :
 
 | Composant | Rôle |
 |---|---|
-| `hooks/session_start_hook.sh` | Sync git auto au démarrage + injection d'un fichier de contexte (CHANGELOG.md par défaut) |
-| `hooks/stop_hook.sh` | Commit + push auto en fin de session (si `session_save` a été lancé), en ne stageant que les fichiers identifiés par le skill comme modifiés dans cette session |
-| `skills/session_save/` | Skill de fin de session : met à jour TODO.md / ARCHITECTURE.md / AGENTS.md / CHANGELOG.md, puis écrit le message de commit |
-| `skills/session_handoff/` | Crée un fichier handoff autonome pour passer la main à un autre agent ou une autre session |
+| `_system/hooks/session_start_hook.sh` | Sync git auto au démarrage + injection d'un fichier de contexte (CHANGELOG.md par défaut) |
+| `_system/hooks/stop_hook.sh` | Commit + push auto en fin de session (si `session_save` a été lancé), en ne stageant que les fichiers identifiés par le skill comme modifiés dans cette session |
+| `_system/skills/session_save/` | Skill de fin de session : met à jour TODO.md / ARCHITECTURE.md / AGENTS.md / CHANGELOG.md, puis écrit le message de commit |
+| `_system/skills/session_handoff/` | Crée un fichier handoff autonome pour passer la main à un autre agent ou une autre session |
+| `.claude/hooks`, `.claude/skills` | Symlinks vers `_system/hooks` et `_system/skills` — lus nativement par Claude Code |
+| `.agents/skills` | Symlink vers `_system/skills` — lu nativement par Codex |
+| `.codex/hooks.json` + `.codex/hooks/*.sh` | Déclaration des hooks Codex (SessionStart, Stop) + wrappers qui traduisent le JSON stdin/stdout attendu par Codex vers les scripts `_system/hooks/*.sh` |
+| `.opencode/plugin/hub-sync.js` | Plugin OpenCode — équivalent fonctionnel des hooks via l'API de plugins JS (`session.created`, `experimental.chat.system.transform`, `tool.execute.after`), appelle les mêmes scripts `_system/hooks/*.sh` |
 
-**Pourquoi :** Claude Code repart de zéro à chaque session — sans mémoire de ce qui a été fait avant. Ce système injecte automatiquement le contexte du projet au démarrage, maintient les fichiers de documentation à jour via `/session_save`, et commit + push en fin de session sans intervention manuelle.
+**Pourquoi :** un agent IA repart de zéro à chaque session — sans mémoire de ce qui a été fait avant. Ce système injecte automatiquement le contexte du projet au démarrage, maintient les fichiers de documentation à jour via `/session_save`, et commit + push en fin de session sans intervention manuelle — quel que soit le harnais utilisé.
 
 ## Comment installer
 
-Donne l'URL de cette page à Claude Code et demande-lui de suivre le guide d'installation ci-dessous.
+Donne l'URL de cette page à ton agent IA et demande-lui de suivre le guide d'installation ci-dessous.
 
 ---
 
-## Guide d'installation (pour Claude Code)
+## Guide d'installation (pour l'agent IA)
 
-> Tu vas installer le système agent-session-helpers dans un projet. Suis chaque étape dans l'ordre.
+> Tu vas installer le système agent-session-helpers dans un projet, pour un ou plusieurs harnais (Claude Code, Codex, OpenCode). Suis chaque étape dans l'ordre.
 
 ### Prérequis
 
 - Le projet doit être un dépôt git avec un remote configuré (`git remote -v` doit retourner quelque chose).
 - Tu dois avoir les droits d'écriture sur le remote.
 
-### Étape 1 — Créer la structure `.claude/`
+### Étape 1 — Créer la structure `_system/`
 
 ```bash
-mkdir -p .claude/hooks .claude/skills/session_save .claude/skills/session_handoff
+mkdir -p _system/hooks _system/skills/session_save _system/skills/session_handoff
 ```
 
-### Étape 2 — Récupérer et copier les hooks
+### Étape 2 — Récupérer et copier les hooks (source de vérité)
 
-Récupère les deux fichiers de hook depuis ce dépôt et écris-les dans `.claude/hooks/` :
+Récupère les deux fichiers de hook depuis ce dépôt et écris-les dans `_system/hooks/` :
 
-- `https://raw.githubusercontent.com/bloculus/agent-session-helpers/main/hooks/stop_hook.sh` → `.claude/hooks/stop_hook.sh`
-- `https://raw.githubusercontent.com/bloculus/agent-session-helpers/main/hooks/session_start_hook.sh` → `.claude/hooks/session_start_hook.sh`
+- `https://raw.githubusercontent.com/bloculus/agent-session-helpers/main/_system/hooks/stop_hook.sh` → `_system/hooks/stop_hook.sh`
+- `https://raw.githubusercontent.com/bloculus/agent-session-helpers/main/_system/hooks/session_start_hook.sh` → `_system/hooks/session_start_hook.sh`
 
 Rends-les exécutables :
 
 ```bash
-chmod +x .claude/hooks/stop_hook.sh .claude/hooks/session_start_hook.sh
+chmod +x _system/hooks/stop_hook.sh _system/hooks/session_start_hook.sh
 ```
 
-**Optionnel :** ouvre `.claude/hooks/session_start_hook.sh` et modifie la variable `CONTEXT_FILE` (ligne ~14) pour choisir le fichier injecté au démarrage de session. Défaut : `CHANGELOG.md`. Autres options : `README.md`, `TODO.md`, ou n'importe quel autre fichier.
+**Optionnel :** ouvre `_system/hooks/session_start_hook.sh` et modifie la variable `CONTEXT_FILE` (ligne ~14) pour choisir le fichier injecté au démarrage de session. Défaut : `CHANGELOG.md`. Autres options : `README.md`, `TODO.md`, ou n'importe quel autre fichier.
 
 ### Étape 3 — Copier les skills
 
 Récupère et écris :
 
-- `https://raw.githubusercontent.com/bloculus/agent-session-helpers/main/skills/session_save/SKILL.md` → `.claude/skills/session_save/SKILL.md`
-- `https://raw.githubusercontent.com/bloculus/agent-session-helpers/main/skills/session_handoff/SKILL.md` → `.claude/skills/session_handoff/SKILL.md`
+- `https://raw.githubusercontent.com/bloculus/agent-session-helpers/main/_system/skills/session_save/SKILL.md` → `_system/skills/session_save/SKILL.md`
+- `https://raw.githubusercontent.com/bloculus/agent-session-helpers/main/_system/skills/session_handoff/SKILL.md` → `_system/skills/session_handoff/SKILL.md`
 
-### Étape 4 — Créer `.claude/settings.json`
+### Étape 4 — Brancher Claude Code (si utilisé)
+
+```bash
+mkdir -p .claude
+ln -s ../_system/hooks .claude/hooks
+ln -s ../_system/skills .claude/skills
+```
+
+Récupère et écris `https://raw.githubusercontent.com/bloculus/agent-session-helpers/main/settings.json` → `.claude/settings.json` (déclare les hooks SessionStart/Stop et les permissions `Skill(session_save)`/`Skill(session_handoff)`).
+
+### Étape 5 — Brancher Codex (si utilisé)
+
+```bash
+mkdir -p .agents .codex/hooks
+ln -s ../_system/skills .agents/skills
+```
 
 Récupère et écris :
 
-- `https://raw.githubusercontent.com/bloculus/agent-session-helpers/main/settings.json` → `.claude/settings.json`
+- `https://raw.githubusercontent.com/bloculus/agent-session-helpers/main/.codex/hooks.json` → `.codex/hooks.json`
+- `https://raw.githubusercontent.com/bloculus/agent-session-helpers/main/.codex/hooks/codex_session_start.sh` → `.codex/hooks/codex_session_start.sh`
+- `https://raw.githubusercontent.com/bloculus/agent-session-helpers/main/.codex/hooks/codex_stop.sh` → `.codex/hooks/codex_stop.sh`
 
-### Étape 5 — Créer les quatre fichiers de documentation projet
+```bash
+chmod +x .codex/hooks/codex_session_start.sh .codex/hooks/codex_stop.sh
+```
+
+⚠️ **Trust Codex** : Codex n'exécute un hook que si deux niveaux de trust sont accordés, tous deux silencieux quand ils manquent (aucun warning) :
+1. Trust du dossier projet côté config utilisateur Codex.
+2. Trust par hook (hash exact de `hooks.json`) — seul le CLI interactif affiche le prompt "Hooks need review" ("Trust all and continue" ou `/hooks`). L'app desktop ne l'affiche jamais.
+
+**Conséquence :** le premier trust doit toujours se faire en lançant `codex` en CLI interactif dans le projet. Une fois accordé, c'est persisté côté utilisateur et partagé avec l'app desktop.
+
+### Étape 6 — Brancher OpenCode (si utilisé)
+
+```bash
+mkdir -p .opencode/plugin
+```
+
+Récupère et écris `https://raw.githubusercontent.com/bloculus/agent-session-helpers/main/.opencode/plugin/hub-sync.js` → `.opencode/plugin/hub-sync.js`.
+
+Rien d'autre à faire : OpenCode charge automatiquement les plugins présents dans `.opencode/plugin/` et lit `AGENTS.md` + `.claude/skills`/`.agents/skills` nativement.
+
+### Étape 7 — Créer les quatre fichiers de documentation projet
 
 Ces fichiers sont le socle du système de session. Génère leur contenu en fonction du projet courant.
 
@@ -125,7 +166,7 @@ Versioning : +0.1 par version, entier suivant pour les refontes majeures.
 - ...
 ```
 
-### Étape 6 — Créer `.claude/settings.local.json` (non versionné)
+### Étape 8 — Créer `.claude/settings.local.json` (non versionné, Claude Code uniquement)
 
 Ce fichier contient les permissions Bash par machine. Il est exclu de git par le gitignore global de Claude Code (`.config/git/ignore`), donc chaque utilisateur le crée pour lui-même.
 
@@ -154,28 +195,44 @@ Crée `.claude/settings.local.json` avec les permissions adaptées au stack du p
 
 Adapte la liste à ton stack (remplace `npm` par `cargo`, `go`, `python`, etc. selon le projet).
 
-### Étape 7 — Commiter tout
+### Étape 9 — `.gitignore` et commit
 
-Ajoute `session_commit_msg.txt` et `session_commit_files.txt` au `.gitignore` — ces fichiers sont les déclencheurs temporaires du hook Stop, ils ne doivent pas être versionnés :
+Ajoute au `.gitignore` :
+
+```
+session_commit_msg.txt
+session_commit_files.txt
+
+# OpenCode runtime cache/server files — only the plugin is versioned
+.opencode/**
+!.opencode/plugin/
+!.opencode/plugin/**
+```
+
+Puis commite (en fonction des harnais réellement branchés aux étapes 4-6) :
 
 ```bash
-printf "session_commit_msg.txt\nsession_commit_files.txt\n" >> .gitignore
-git add AGENTS.md ARCHITECTURE.md TODO.md CHANGELOG.md .gitignore .claude/settings.json .claude/hooks/ .claude/skills/
-git commit -m "chore: add Claude Code session management (agent-session-helpers)"
+git add AGENTS.md ARCHITECTURE.md TODO.md CHANGELOG.md .gitignore \
+  _system/hooks _system/skills \
+  .claude/settings.json .claude/hooks .claude/skills \
+  .agents/skills .codex .opencode/plugin
+git commit -m "chore: add multi-agent session management (agent-session-helpers)"
 git push
 ```
 
 > `.claude/settings.local.json` est intentionnellement exclu de ce commit — il est spécifique à chaque machine.
 
-### Étape 8 — Redémarrer VS Code
+### Étape 10 — Redémarrer / relancer chaque harnais branché
 
-⚠️ **Redémarre VS Code** avant de tester. Claude Code charge les hooks au démarrage — sans redémarrage après l'installation, le hook Stop ne se déclenchera pas.
+⚠️ **Claude Code** : redémarre VS Code avant de tester — les hooks sont chargés au démarrage.
+⚠️ **Codex** : lance `codex` en CLI interactif au moins une fois pour accorder le trust (voir Étape 5).
+⚠️ **OpenCode** : relance le serveur/TUI pour qu'il recharge les plugins.
 
-### Étape 9 — Vérifier
+### Étape 11 — Vérifier
 
-1. Ouvre le projet dans Claude Code — le hook SessionStart doit tourner, synchroniser git et injecter le fichier de contexte.
+1. Ouvre le projet — le hook/plugin SessionStart doit tourner, synchroniser git et injecter le fichier de contexte.
 2. Fais une modification, puis lance `/session_save` — il doit mettre à jour les fichiers doc et écrire `session_commit_msg.txt`.
-3. Attends la fin de la réponse de Claude — le hook Stop doit commiter et pusher automatiquement (pas besoin de fermer la fenêtre).
+3. Attends la fin de la réponse de l'agent — le hook/plugin Stop doit commiter et pusher automatiquement.
 4. Vérifie sur GitHub que le commit apparaît.
 
 ---
@@ -190,7 +247,7 @@ Se lance en fin de session de travail. Demande confirmation, puis :
 3. Propose des mises à jour de `AGENTS.md` (règles permanentes, confirmation requise)
 4. Ajoute les entrées de la session dans `CHANGELOG.md [Unreleased]`
 5. Consolide le scope de commit : liste les fichiers modifiés par cette session précise, demande confirmation pour tout fichier détecté hors scope (probable session parallèle), écrit `session_commit_files.txt`
-6. Écrit `session_commit_msg.txt` — le hook Stop récupère les deux fichiers, ne stage que les fichiers listés (jamais un `git add -A` aveugle) et commite
+6. Écrit `session_commit_msg.txt` — le hook/plugin Stop récupère les deux fichiers, ne stage que les fichiers listés (jamais un `git add -A` aveugle) et commite
 
 ### `/session_handoff`
 
