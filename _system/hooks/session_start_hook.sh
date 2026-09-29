@@ -14,6 +14,10 @@ ERROR_LOG="$REPO/session_error.log"
 CONTEXT_FILE="$REPO/CHANGELOG.md"
 # ──────────────────────────────────────────────────────────────────────────
 
+# No remote configured (ex. RGPD-conscious local-only repo, no DPA with the git host) —
+# nothing to sync, skip the whole pull block silently.
+if git -C "$REPO" remote get-url origin >/dev/null 2>&1; then
+
 # Attempt to pull. On conflict: abort rebase cleanly.
 PULL_FAILED=false
 FETCH_OUTPUT=$(git -C "$REPO" fetch origin main 2>&1)
@@ -68,6 +72,8 @@ if $PULL_FAILED; then
 else
   # No pull error: remove error log if it exists
   rm -f "$ERROR_LOG"
+fi
+
 fi
 
 # If session_error.log exists, inject instruction for Claude — placed before the context

@@ -83,6 +83,10 @@ fi
 # Delete the message file right after commit — prevents double-commit if push fails later
 rm "$MSG_FILE"
 
+# No remote configured (ex. RGPD-conscious local-only repo, no DPA with the git host) —
+# nothing to push, the local commit above already succeeded.
+git -C "$REPO" remote get-url origin >/dev/null 2>&1 || exit 0
+
 # Pull with rebase before pushing to handle cases where remote has advanced
 # --autostash: stashes any uncommitted changes before rebasing, restores them after
 # On conflict: abort rebase, skip push, write session_error.log for next session_start to handle
