@@ -12,7 +12,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash $(git rev-parse --show-toplevel 2>/dev/null)/.claude/hooks/session_start_hook.sh"
+            "command": "bash \"$(git rev-parse --show-toplevel 2>/dev/null)/.claude/hooks/session_start_hook.sh\""
           }
         ]
       }
@@ -22,7 +22,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash $(git rev-parse --show-toplevel 2>/dev/null)/.claude/hooks/stop_hook.sh"
+            "command": "bash \"$(git rev-parse --show-toplevel 2>/dev/null)/.claude/hooks/stop_hook.sh\""
           }
         ]
       }
