@@ -11,7 +11,6 @@ Un ensemble de hooks et de skills qui connectent ton harnais IA (Claude Code, Op
 | `_system/hooks/session_start_hook.sh` | Sync git auto au démarrage + injection d'un fichier de contexte (CHANGELOG.md par défaut) |
 | `_system/hooks/stop_hook.sh` | Commit + push auto en fin de session (si `session_save` a été lancé), en ne stageant que les fichiers identifiés par le skill comme modifiés dans cette session |
 | `_system/skills/session_save/` | Skill de fin de session : met à jour TODO.md / ARCHITECTURE.md / AGENTS.md / CHANGELOG.md, puis écrit le message de commit |
-| `_system/skills/session_handoff/` | Crée un fichier handoff autonome pour passer la main à un autre agent ou une autre session |
 | `.claude/hooks`, `.claude/skills` | Symlinks vers `_system/hooks` et `_system/skills` — lus nativement par Claude Code |
 | `.agents/skills` | Symlink vers `_system/skills` — lu nativement par Codex |
 | `.codex/hooks.json` + `.codex/hooks/*.sh` | Déclaration des hooks Codex (SessionStart, Stop) + wrappers qui traduisent le JSON stdin/stdout attendu par Codex vers les scripts `_system/hooks/*.sh` |
@@ -37,7 +36,7 @@ Donne l'URL de cette page à ton agent IA et demande-lui de suivre le guide d'in
 ### Étape 1 — Créer la structure `_system/`
 
 ```bash
-mkdir -p _system/hooks _system/skills/session_save _system/skills/session_handoff
+mkdir -p _system/hooks _system/skills/session_save
 ```
 
 ### Étape 2 — Récupérer et copier les hooks (source de vérité)
@@ -60,7 +59,6 @@ chmod +x _system/hooks/stop_hook.sh _system/hooks/session_start_hook.sh
 Récupère et écris :
 
 - `https://raw.githubusercontent.com/bloculus/agent-session-helpers/main/_system/skills/session_save/SKILL.md` → `_system/skills/session_save/SKILL.md`
-- `https://raw.githubusercontent.com/bloculus/agent-session-helpers/main/_system/skills/session_handoff/SKILL.md` → `_system/skills/session_handoff/SKILL.md`
 
 ### Étape 4 — Brancher Claude Code (si utilisé)
 
@@ -70,7 +68,7 @@ ln -s ../_system/hooks .claude/hooks
 ln -s ../_system/skills .claude/skills
 ```
 
-Récupère et écris `https://raw.githubusercontent.com/bloculus/agent-session-helpers/main/settings.json` → `.claude/settings.json` (déclare les hooks SessionStart/Stop et les permissions `Skill(session_save)`/`Skill(session_handoff)`).
+Récupère et écris `https://raw.githubusercontent.com/bloculus/agent-session-helpers/main/settings.json` → `.claude/settings.json` (déclare les hooks SessionStart/Stop et les permissions `Skill(session_save)`).
 
 ### Étape 5 — Brancher Codex (si utilisé)
 
@@ -248,7 +246,3 @@ Se lance en fin de session de travail. Demande confirmation, puis :
 4. Ajoute les entrées de la session dans `CHANGELOG.md [Unreleased]`
 5. Consolide le scope de commit : liste les fichiers modifiés par cette session précise, demande confirmation pour tout fichier détecté hors scope (probable session parallèle), écrit `session_commit_files.txt`
 6. Écrit `session_commit_msg.txt` — le hook/plugin Stop récupère les deux fichiers, ne stage que les fichiers listés (jamais un `git add -A` aveugle) et commite
-
-### `/session_handoff`
-
-Crée un fichier `handoff_YYMMDD_[theme].md` autonome à la racine du projet. Un agent démarrant à froid peut le lire et reprendre sans avoir accès à l'historique de conversation. Gère aussi le chargement d'un handoff existant (Mode REPRISE).

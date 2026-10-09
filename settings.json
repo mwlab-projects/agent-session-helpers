@@ -1,8 +1,7 @@
 {
   "permissions": {
     "allow": [
-      "Skill(session_save)",
-      "Skill(session_handoff)"
+      "Skill(session_save)"
     ]
   },
   "hooks": {
