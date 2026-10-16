@@ -8,12 +8,28 @@ ERROR_LOG="$REPO/session_error.log"
 # Skip if not in a git repo or no session commit prepared
 [ -n "$REPO" ] && ls "$REPO"/_system/session_commit_*.txt >/dev/null 2>&1 || exit 0
 
-# Every open session fires this hook at the end of its turn: two runs at the same moment used to
-# process the same commit file twice (duplicate empty commit, then a rejected concurrent push -> false
-# "push failed" alert). One run at a time; a run that waited finds the queue already processed.
-# Lock still busy after 45s: the commit files stay in place for the next turn's run.
-. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/session_lock.sh"
-session_lock_acquire "$REPO" 45 || exit 0
+# Lock: every open session fires this hook at the end of its turn, and two runs at the same moment used
+# to process the same commit file twice (duplicate empty commit, then a rejected concurrent push -> false
+# "push failed" alert). One run at a time; a run that waited finds the commit files already processed.
+# The lock is a directory inside .git (mkdir is atomic on every OS, never versioned, shared by all
+# worktrees), removed as soon as the hook exits. A stale lock (owner process gone, or older than 10 min)
+# is taken over. Lock still busy after 45s (SESSION_LOCK_TIMEOUT, used by the tests): the commit files
+# stay in place for the next turn's run.
+LOCK="$(cd "$REPO" && cd "$(git rev-parse --git-common-dir)" && pwd)/session-hooks.lock"
+TRIES=0
+until mkdir "$LOCK" 2>/dev/null; do
+  OWNER=$(cat "$LOCK/pid" 2>/dev/null)
+  if { [ -n "$OWNER" ] && ! kill -0 "$OWNER" 2>/dev/null; } || \
+     [ -n "$(find "$LOCK" -maxdepth 0 -mmin +10 2>/dev/null)" ]; then
+    rm -rf "$LOCK"
+    continue
+  fi
+  [ "$TRIES" -ge $(( ${SESSION_LOCK_TIMEOUT:-45} * 2 )) ] && exit 0
+  sleep 0.5
+  TRIES=$((TRIES + 1))
+done
+echo "$$" > "$LOCK/pid"
+trap 'rm -rf "$LOCK"' EXIT
 
 for REQ in "$REPO"/_system/session_commit_*.txt; do
   [ -f "$REQ" ] || continue

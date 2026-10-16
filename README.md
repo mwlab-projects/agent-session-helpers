@@ -9,8 +9,7 @@ Un ensemble de hooks et de skills qui connectent ton harnais IA (Claude Code, Op
 | Composant | Rôle |
 |---|---|
 | `_system/hooks/session_start_hook.sh` | Sync git auto au démarrage + injection d'un fichier de contexte (CHANGELOG.md par défaut) |
-| `_system/hooks/stop_hook.sh` | Commit + push auto en fin de session (si `session_save` a préparé un commit), en ne stageant que les fichiers identifiés par le skill comme modifiés dans cette session |
-| `_system/hooks/session_lock.sh` | Verrou utilisé par `stop_hook.sh` : plusieurs sessions ouvertes dans le même dossier ne commitent/poussent jamais en même temps (dossier dans `.git/`, supprimé dès la fin du hook) |
+| `_system/hooks/stop_hook.sh` | Commit + push auto en fin de session (si `session_save` a préparé un commit), en ne stageant que les fichiers identifiés par le skill comme modifiés dans cette session ; verrou intégré (dossier dans `.git/`) : plusieurs sessions ouvertes dans le même dossier ne commitent/poussent jamais en même temps |
 | `_system/skills/session_save/` | Skill de fin de session : met à jour TODO.md / ARCHITECTURE.md / AGENTS.md / CHANGELOG.md, puis prépare le commit (script `scripts/prepare_session_commit.sh`, un fichier `_system/session_commit_<horodatage>.txt` par sauvegarde, format garanti) |
 | `.claude/hooks`, `.claude/skills` | Symlinks vers `_system/hooks` et `_system/skills` — lus nativement par Claude Code |
 | `.agents/skills` | Symlink vers `_system/skills` — lu nativement par Codex |
@@ -42,16 +41,15 @@ mkdir -p _system/hooks _system/skills/session_save/scripts
 
 ### Étape 2 — Récupérer et copier les hooks (source de vérité)
 
-Récupère les trois fichiers de hook depuis ce dépôt et écris-les dans `_system/hooks/` :
+Récupère les deux fichiers de hook depuis ce dépôt et écris-les dans `_system/hooks/` :
 
 - `https://raw.githubusercontent.com/mwlab-projects/agent-session-helpers/main/_system/hooks/stop_hook.sh` → `_system/hooks/stop_hook.sh`
 - `https://raw.githubusercontent.com/mwlab-projects/agent-session-helpers/main/_system/hooks/session_start_hook.sh` → `_system/hooks/session_start_hook.sh`
-- `https://raw.githubusercontent.com/mwlab-projects/agent-session-helpers/main/_system/hooks/session_lock.sh` → `_system/hooks/session_lock.sh`
 
 Rends-les exécutables :
 
 ```bash
-chmod +x _system/hooks/stop_hook.sh _system/hooks/session_start_hook.sh _system/hooks/session_lock.sh
+chmod +x _system/hooks/stop_hook.sh _system/hooks/session_start_hook.sh
 ```
 
 **Optionnel :** ouvre `_system/hooks/session_start_hook.sh` et modifie la variable `CONTEXT_FILE` (ligne ~14) pour choisir le fichier injecté au démarrage de session. Défaut : `CHANGELOG.md`. Autres options : `README.md`, `TODO.md`, ou n'importe quel autre fichier.
