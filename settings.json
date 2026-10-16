@@ -1,7 +1,8 @@
 {
   "permissions": {
     "allow": [
-      "Skill(session_save)"
+      "Skill(session_save)",
+      "Bash(bash *prepare_session_commit.sh*)"
     ]
   },
   "hooks": {

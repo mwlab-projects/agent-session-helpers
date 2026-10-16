@@ -191,30 +191,38 @@ Mettre à jour les fichiers contexte impactés par les modifications de la sessi
       ```
       Attendre une réponse. Sans confirmation explicite, ne jamais les inclure.
 
-15. Écrire la liste finale (fichiers de l'étape 13 + fichiers confirmés à l'étape 14)
-    dans `session_commit_files.txt` (racine du repo), un chemin par ligne, avec
-    l'outil **Write**.
+## Étape 6 — Préparation du commit
 
-## Étape 6 — Message de commit
+15. Préparer le commit de la session avec le script (Bash, un seul appel), en passant
+    la liste finale (fichiers de l'étape 13 + fichiers confirmés à l'étape 14) en
+    arguments entre guillemets, et le message de commit sur l'entrée standard
+    (heredoc à délimiteur entre apostrophes) :
+    ```
+    bash "_system/skills/session_save/scripts/prepare_session_commit.sh" "chemin/un" "chemin/deux" <<'EOF'
+    type: résumé court
 
-16. Écrire avec l'outil **Write** (pas Bash) dans `session_commit_msg.txt` (racine
-    du repo) :
-    - Ligne 1 : `type: résumé court` au format Conventional Commits, cohérent avec
+    - entrée du CHANGELOG
+    - entrée du CHANGELOG
+    EOF
+    ```
+    - Ligne 1 du message : `type: résumé court` au format Conventional Commits, cohérent avec
       l'historique du repo (`fix:`, `feat:`, `docs:`, `chore:`, etc.) — déterminer
       le type dominant à partir des changements de code de la session ; si la
       session n'a touché que la documentation → `docs:`
-    - Ligne 2 : vide (séparateur git titre/corps)
+    - Ligne 2 vide (séparateur git titre/corps)
     - Ligne 3+ : bullets reprenant les entrées ajoutées au CHANGELOG, plus une
       mention des fichiers doc mis à jour (TODO.md/ARCHITECTURE.md/AGENTS.md si
       modifiés)
+    - Liste vide autorisée (aucun argument) : le résumé est enregistré sans fichier
+    - Le script ne dit rien en cas de succès. S'il refuse (message vide, chemin
+      inconnu), il indique quoi corriger : corriger et relancer
     - ⛔ Ne pas exécuter `git add`, `git commit` ou `git push` — le hook `Stop` s'en
-      charge automatiquement, en se limitant aux fichiers listés dans
-      `session_commit_files.txt` écrit à l'étape 15
+      charge automatiquement, en se limitant aux fichiers passés au script
     - Afficher : "Session sauvegardée 👍"
 
 ## Étape 7 — Definition of Done
 
-17. Valider chaque point, corriger immédiatement tout point non respecté :
+16. Valider chaque point, corriger immédiatement tout point non respecté :
     - `TODO.md` à jour (hors statuts "résolu" en attente de confirmation séparée),
       aucune ligne "Issues connues"/tâche laissée ouverte pour le sujet de la
       session sans confirmation explicite de l'utilisateur sur son statut
@@ -224,5 +232,5 @@ Mettre à jour les fichiers contexte impactés par les modifications de la sessi
     - `CHANGELOG.md` `[Unreleased]` contient les entrées de la session
     - La liste des fichiers de commit a été consolidée (étapes 13-14) et les
       fichiers hors session, le cas échéant, soumis à confirmation avant inclusion
-    - `session_commit_files.txt` et `session_commit_msg.txt` écrits (racine du
-      repo — le hook se charge du reste)
+    - Le commit de la session préparé par `prepare_session_commit.sh` à l'étape 15
+      (le hook se charge du reste)

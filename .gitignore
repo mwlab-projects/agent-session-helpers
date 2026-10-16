@@ -1,7 +1,6 @@
 # Transient session-save files (Stop hook working files + sync error log)
 session_error.log
-session_commit_msg.txt
-session_commit_files.txt
+_system/session_commit_*.txt
 
 # OpenCode runtime cache/server files — only the plugin is versioned
 .opencode/**

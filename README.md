@@ -9,8 +9,9 @@ Un ensemble de hooks et de skills qui connectent ton harnais IA (Claude Code, Op
 | Composant | Rôle |
 |---|---|
 | `_system/hooks/session_start_hook.sh` | Sync git auto au démarrage + injection d'un fichier de contexte (CHANGELOG.md par défaut) |
-| `_system/hooks/stop_hook.sh` | Commit + push auto en fin de session (si `session_save` a été lancé), en ne stageant que les fichiers identifiés par le skill comme modifiés dans cette session |
-| `_system/skills/session_save/` | Skill de fin de session : met à jour TODO.md / ARCHITECTURE.md / AGENTS.md / CHANGELOG.md, puis écrit le message de commit |
+| `_system/hooks/stop_hook.sh` | Commit + push auto en fin de session (si `session_save` a préparé un commit), en ne stageant que les fichiers identifiés par le skill comme modifiés dans cette session |
+| `_system/hooks/session_lock.sh` | Verrou utilisé par `stop_hook.sh` : plusieurs sessions ouvertes dans le même dossier ne commitent/poussent jamais en même temps (dossier dans `.git/`, supprimé dès la fin du hook) |
+| `_system/skills/session_save/` | Skill de fin de session : met à jour TODO.md / ARCHITECTURE.md / AGENTS.md / CHANGELOG.md, puis prépare le commit (script `scripts/prepare_session_commit.sh`, un fichier `_system/session_commit_<horodatage>.txt` par sauvegarde, format garanti) |
 | `.claude/hooks`, `.claude/skills` | Symlinks vers `_system/hooks` et `_system/skills` — lus nativement par Claude Code |
 | `.agents/skills` | Symlink vers `_system/skills` — lu nativement par Codex |
 | `.codex/hooks.json` + `.codex/hooks/*.sh` | Déclaration des hooks Codex (SessionStart, Stop) + wrappers qui traduisent le JSON stdin/stdout attendu par Codex vers les scripts `_system/hooks/*.sh` |
@@ -36,20 +37,21 @@ Donne l'URL de cette page à ton agent IA et demande-lui de suivre le guide d'in
 ### Étape 1 — Créer la structure `_system/`
 
 ```bash
-mkdir -p _system/hooks _system/skills/session_save
+mkdir -p _system/hooks _system/skills/session_save/scripts
 ```
 
 ### Étape 2 — Récupérer et copier les hooks (source de vérité)
 
-Récupère les deux fichiers de hook depuis ce dépôt et écris-les dans `_system/hooks/` :
+Récupère les trois fichiers de hook depuis ce dépôt et écris-les dans `_system/hooks/` :
 
-- `https://raw.githubusercontent.com/bloculus/agent-session-helpers/main/_system/hooks/stop_hook.sh` → `_system/hooks/stop_hook.sh`
-- `https://raw.githubusercontent.com/bloculus/agent-session-helpers/main/_system/hooks/session_start_hook.sh` → `_system/hooks/session_start_hook.sh`
+- `https://raw.githubusercontent.com/mwlab-projects/agent-session-helpers/main/_system/hooks/stop_hook.sh` → `_system/hooks/stop_hook.sh`
+- `https://raw.githubusercontent.com/mwlab-projects/agent-session-helpers/main/_system/hooks/session_start_hook.sh` → `_system/hooks/session_start_hook.sh`
+- `https://raw.githubusercontent.com/mwlab-projects/agent-session-helpers/main/_system/hooks/session_lock.sh` → `_system/hooks/session_lock.sh`
 
 Rends-les exécutables :
 
 ```bash
-chmod +x _system/hooks/stop_hook.sh _system/hooks/session_start_hook.sh
+chmod +x _system/hooks/stop_hook.sh _system/hooks/session_start_hook.sh _system/hooks/session_lock.sh
 ```
 
 **Optionnel :** ouvre `_system/hooks/session_start_hook.sh` et modifie la variable `CONTEXT_FILE` (ligne ~14) pour choisir le fichier injecté au démarrage de session. Défaut : `CHANGELOG.md`. Autres options : `README.md`, `TODO.md`, ou n'importe quel autre fichier.
@@ -58,7 +60,8 @@ chmod +x _system/hooks/stop_hook.sh _system/hooks/session_start_hook.sh
 
 Récupère et écris :
 
-- `https://raw.githubusercontent.com/bloculus/agent-session-helpers/main/_system/skills/session_save/SKILL.md` → `_system/skills/session_save/SKILL.md`
+- `https://raw.githubusercontent.com/mwlab-projects/agent-session-helpers/main/_system/skills/session_save/SKILL.md` → `_system/skills/session_save/SKILL.md`
+- `https://raw.githubusercontent.com/mwlab-projects/agent-session-helpers/main/_system/skills/session_save/scripts/prepare_session_commit.sh` → `_system/skills/session_save/scripts/prepare_session_commit.sh` (puis `chmod +x _system/skills/session_save/scripts/prepare_session_commit.sh`)
 
 ### Étape 4 — Brancher Claude Code (si utilisé)
 
@@ -68,7 +71,7 @@ ln -s ../_system/hooks .claude/hooks
 ln -s ../_system/skills .claude/skills
 ```
 
-Récupère et écris `https://raw.githubusercontent.com/bloculus/agent-session-helpers/main/settings.json` → `.claude/settings.json` (déclare les hooks SessionStart/Stop et les permissions `Skill(session_save)`).
+Récupère et écris `https://raw.githubusercontent.com/mwlab-projects/agent-session-helpers/main/settings.json` → `.claude/settings.json` (déclare les hooks SessionStart/Stop et les permissions `Skill(session_save)`).
 
 ### Étape 5 — Brancher Codex (si utilisé)
 
@@ -79,9 +82,9 @@ ln -s ../_system/skills .agents/skills
 
 Récupère et écris :
 
-- `https://raw.githubusercontent.com/bloculus/agent-session-helpers/main/.codex/hooks.json` → `.codex/hooks.json`
-- `https://raw.githubusercontent.com/bloculus/agent-session-helpers/main/.codex/hooks/codex_session_start.sh` → `.codex/hooks/codex_session_start.sh`
-- `https://raw.githubusercontent.com/bloculus/agent-session-helpers/main/.codex/hooks/codex_stop.sh` → `.codex/hooks/codex_stop.sh`
+- `https://raw.githubusercontent.com/mwlab-projects/agent-session-helpers/main/.codex/hooks.json` → `.codex/hooks.json`
+- `https://raw.githubusercontent.com/mwlab-projects/agent-session-helpers/main/.codex/hooks/codex_session_start.sh` → `.codex/hooks/codex_session_start.sh`
+- `https://raw.githubusercontent.com/mwlab-projects/agent-session-helpers/main/.codex/hooks/codex_stop.sh` → `.codex/hooks/codex_stop.sh`
 
 ```bash
 chmod +x .codex/hooks/codex_session_start.sh .codex/hooks/codex_stop.sh
@@ -99,7 +102,7 @@ chmod +x .codex/hooks/codex_session_start.sh .codex/hooks/codex_stop.sh
 mkdir -p .opencode/plugin
 ```
 
-Récupère et écris `https://raw.githubusercontent.com/bloculus/agent-session-helpers/main/.opencode/plugin/hub-sync.js` → `.opencode/plugin/hub-sync.js`.
+Récupère et écris `https://raw.githubusercontent.com/mwlab-projects/agent-session-helpers/main/.opencode/plugin/hub-sync.js` → `.opencode/plugin/hub-sync.js`.
 
 Rien d'autre à faire : OpenCode charge automatiquement les plugins présents dans `.opencode/plugin/` et lit `AGENTS.md` + `.claude/skills`/`.agents/skills` nativement.
 
@@ -184,8 +187,7 @@ Crée `.claude/settings.local.json` avec les permissions adaptées au stack du p
       "Bash(chmod:*)",
       "WebSearch",
       "WebFetch",
-      "Write(session_commit_msg.txt)",
-      "Write(session_commit_files.txt)"
+      "Bash(bash *prepare_session_commit.sh*)"
     ]
   }
 }
@@ -198,8 +200,7 @@ Adapte la liste à ton stack (remplace `npm` par `cargo`, `go`, `python`, etc. s
 Ajoute au `.gitignore` :
 
 ```
-session_commit_msg.txt
-session_commit_files.txt
+_system/session_commit_*.txt
 
 # OpenCode runtime cache/server files — only the plugin is versioned
 .opencode/**
@@ -229,7 +230,7 @@ git push
 ### Étape 11 — Vérifier
 
 1. Ouvre le projet — le hook/plugin SessionStart doit tourner, synchroniser git et injecter le fichier de contexte.
-2. Fais une modification, puis lance `/session_save` — il doit mettre à jour les fichiers doc et écrire `session_commit_msg.txt`.
+2. Fais une modification, puis lance `/session_save` — il doit mettre à jour les fichiers doc et préparer un fichier `_system/session_commit_<horodatage>.txt`.
 3. Attends la fin de la réponse de l'agent — le hook/plugin Stop doit commiter et pusher automatiquement.
 4. Vérifie sur GitHub que le commit apparaît.
 
@@ -244,5 +245,5 @@ Se lance en fin de session de travail. Demande confirmation, puis :
 2. Met à jour `ARCHITECTURE.md` (si l'architecture a changé)
 3. Propose des mises à jour de `AGENTS.md` (règles permanentes, confirmation requise)
 4. Ajoute les entrées de la session dans `CHANGELOG.md [Unreleased]`
-5. Consolide le scope de commit : liste les fichiers modifiés par cette session précise, demande confirmation pour tout fichier détecté hors scope (probable session parallèle), écrit `session_commit_files.txt`
-6. Écrit `session_commit_msg.txt` — le hook/plugin Stop récupère les deux fichiers, ne stage que les fichiers listés (jamais un `git add -A` aveugle) et commite
+5. Consolide le scope de commit : liste les fichiers modifiés par cette session précise, demande confirmation pour tout fichier détecté hors scope (probable session parallèle), puis passe la liste et le message au script `prepare_session_commit.sh`
+6. Le script écrit `_system/session_commit_<horodatage>.txt` (un fichier par sauvegarde, format garanti, silencieux) — le hook/plugin Stop le récupère, ne stage que les fichiers listés (jamais un `git add -A` aveugle) et commite

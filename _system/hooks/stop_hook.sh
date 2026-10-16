@@ -1,24 +1,40 @@
 #!/bin/bash
-# Stop hook — runs automatically at the end of each Agent session
-# Commits and pushes changes if a commit message file exists
+# Stop hook — runs automatically at the end of each agent turn, in every session open in the repository.
+# Commits and pushes the session commits prepared by prepare_session_commit.sh (file format described there, and only there).
 
 REPO=$(git rev-parse --show-toplevel 2>/dev/null)
-MSG_FILE="$REPO/session_commit_msg.txt"
-FILES_LIST="$REPO/session_commit_files.txt"
-
-# Skip if not in a git repo or no commit message queued
-[ -n "$REPO" ] && [ -f "$MSG_FILE" ] || exit 0
-
 ERROR_LOG="$REPO/session_error.log"
 
-# Stage only the files the session identified as its own (written by session_save)
-# — never a blanket `git add -A`, which would sweep up other concurrent sessions' in-progress
-# work sharing the same working tree.
-if [ -f "$FILES_LIST" ]; then
+# Skip if not in a git repo or no session commit prepared
+[ -n "$REPO" ] && ls "$REPO"/_system/session_commit_*.txt >/dev/null 2>&1 || exit 0
+
+# Every open session fires this hook at the end of its turn: two runs at the same moment used to
+# process the same commit file twice (duplicate empty commit, then a rejected concurrent push -> false
+# "push failed" alert). One run at a time; a run that waited finds the queue already processed.
+# Lock still busy after 45s: the commit files stay in place for the next turn's run.
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/session_lock.sh"
+session_lock_acquire "$REPO" 45 || exit 0
+
+for REQ in "$REPO"/_system/session_commit_*.txt; do
+  [ -f "$REQ" ] || continue
+
+  # Split the commit file (format: see prepare_session_commit.sh): file paths, separator line, commit message
+  SEP_LINE=$(grep -n -x -m1 -F '=== MESSAGE ===' "$REQ" | cut -d: -f1)
+  if [ -z "$SEP_LINE" ]; then
+    printf "Malformed session commit file (no message separator), dropped. Content:\n%s\n" "$(cat "$REQ")" >> "$ERROR_LOG"
+    rm -f "$REQ"
+    continue
+  fi
+  FILES_TEXT=$(head -n $((SEP_LINE - 1)) "$REQ")
+  MESSAGE=$(tail -n +$((SEP_LINE + 1)) "$REQ")
+
+  # Stage only the files the session identified as its own (listed by prepare_session_commit.sh)
+  # — never a blanket `git add -A`, which would sweep up other concurrent sessions' in-progress
+  # work sharing the same working tree.
   FAILED=""
   # Handle the final line even when the file has no trailing newline: plain `while read`
-# silently skips it (read returns EOF after filling the variable, so the loop body never
-# runs) - which once dropped the last file of the session list from the commit entirely.
+  # silently skips it (read returns EOF after filling the variable, so the loop body never
+  # runs) - which once dropped the last file of the session list from the commit entirely.
   while IFS= read -r f || [ -n "$f" ]; do
     # The session's file list is written by an agent process: strip the invisible characters
     # an editor/encoding can slip in (trailing CR from CRLF line endings, leading/trailing
@@ -53,37 +69,28 @@ if [ -f "$FILES_LIST" ]; then
         fi
       fi
     fi
-  done < "$FILES_LIST"
-  rm "$FILES_LIST"
-  # Never fail silently: a malformed path (e.g. a future regression in how the skill lists
-  # files) must surface via session_error.log instead of just being dropped from the commit.
+  done <<< "$FILES_TEXT"
+
+  # Never fail silently: a malformed path must surface via session_error.log instead of just
+  # being dropped from the commit.
   if [ -n "$FAILED" ]; then
     printf "git add failed for these paths (not included in the commit):\n%s" "$FAILED" >> "$ERROR_LOG"
   fi
-else
-  # Abnormal case: the skill is supposed to always write this file alongside the commit
-  # message. Never fall back to `git add -A` here — it would sweep a concurrent session's
-  # unrelated, in-progress changes into this commit, contradicting the whole point of scoping
-  # by FILES_LIST above. Stage nothing: the session summary still lands in git log via the
-  # --allow-empty commit below, and any real file changes stay untouched in the working tree —
-  # the next session_save run will detect them (git status vs its own list) and ask
-  # for confirmation before including them, exactly like any other out-of-scope file.
-  echo "Commit scope not applied: $FILES_LIST not found, nothing staged for this commit (not a sync conflict — check why the skill didn't write it). Any modified files are left untouched in the working tree." >> "$ERROR_LOG"
-fi
 
-# Nothing staged (e.g. session touched no local file) — commit anyway with --allow-empty so the
-# session's summary still lands in git log (history lives entirely in commit messages here).
-# Never risks pulling in unrelated changes: an empty commit stages nothing.
-if git -C "$REPO" diff --cached --quiet; then
-  git -C "$REPO" commit --allow-empty -F "$MSG_FILE"
-else
-  git -C "$REPO" commit -F "$MSG_FILE"
-fi
+  # Nothing staged (e.g. session touched no local file) — commit anyway with --allow-empty so the
+  # session's summary still lands in git log (history lives entirely in commit messages here).
+  # Never risks pulling in unrelated changes: an empty commit stages nothing.
+  if git -C "$REPO" diff --cached --quiet; then
+    printf '%s\n' "$MESSAGE" | git -C "$REPO" commit --allow-empty -F -
+  else
+    printf '%s\n' "$MESSAGE" | git -C "$REPO" commit -F -
+  fi
 
-# Delete the message file right after commit — prevents double-commit if push fails later
-rm "$MSG_FILE"
+  # Delete the commit file right after its commit — prevents a double commit if the push fails later
+  rm -f "$REQ"
+done
 
-# No remote configured (ex. RGPD-conscious local-only repo, no DPA with the git host) —
+# No remote configured (ex. RGPD-conscious local-only hub, no DPA with the git host) —
 # nothing to push, the local commit above already succeeded.
 git -C "$REPO" remote get-url origin >/dev/null 2>&1 || exit 0
 
