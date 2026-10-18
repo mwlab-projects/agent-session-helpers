@@ -10,6 +10,7 @@ Un ensemble de hooks et de skills qui connectent ton harnais IA (Claude Code, Op
 |---|---|
 | `_system/hooks/session_start_hook.sh` | Sync git auto au démarrage + injection d'un fichier de contexte (CHANGELOG.md par défaut) |
 | `_system/hooks/stop_hook.sh` | Commit + push auto en fin de session (si `session_save` a préparé un commit), en ne stageant que les fichiers identifiés par le skill comme modifiés dans cette session ; verrou intégré (dossier dans `.git/`) : plusieurs sessions ouvertes dans le même dossier ne commitent/poussent jamais en même temps |
+| `_system/hooks/scripts/sync_git_with_remote.sh` | Synchro git partagée par les deux hooks (fonctionnement détaillé en tête du script) : ne perd jamais le travail des sessions parallèles ouvertes dans le même dossier |
 | `_system/skills/session_save/` | Skill de fin de session : met à jour TODO.md / ARCHITECTURE.md / AGENTS.md / CHANGELOG.md, puis prépare le commit (script `scripts/prepare_session_commit.sh`, un fichier `_system/session_commit_<horodatage>.txt` par sauvegarde, format garanti) |
 | `.claude/hooks`, `.claude/skills` | Symlinks vers `_system/hooks` et `_system/skills` — lus nativement par Claude Code |
 | `.agents/skills` | Symlink vers `_system/skills` — lu nativement par Codex |
@@ -32,27 +33,29 @@ Donne l'URL de cette page à ton agent IA et demande-lui de suivre le guide d'in
 
 - Le projet doit être un dépôt git avec un remote configuré (`git remote -v` doit retourner quelque chose).
 - Tu dois avoir les droits d'écriture sur le remote.
+- git 2.38 ou plus récent (`git --version`) : la synchronisation s'appuie sur `git merge-tree`.
 
 ### Étape 1 — Créer la structure `_system/`
 
 ```bash
-mkdir -p _system/hooks _system/skills/session_save/scripts
+mkdir -p _system/hooks/scripts _system/skills/session_save/scripts
 ```
 
 ### Étape 2 — Récupérer et copier les hooks (source de vérité)
 
-Récupère les deux fichiers de hook depuis ce dépôt et écris-les dans `_system/hooks/` :
+Récupère les deux hooks et leur script de synchro git depuis ce dépôt :
 
 - `https://raw.githubusercontent.com/mwlab-projects/agent-session-helpers/main/_system/hooks/stop_hook.sh` → `_system/hooks/stop_hook.sh`
 - `https://raw.githubusercontent.com/mwlab-projects/agent-session-helpers/main/_system/hooks/session_start_hook.sh` → `_system/hooks/session_start_hook.sh`
+- `https://raw.githubusercontent.com/mwlab-projects/agent-session-helpers/main/_system/hooks/scripts/sync_git_with_remote.sh` → `_system/hooks/scripts/sync_git_with_remote.sh`
 
 Rends-les exécutables :
 
 ```bash
-chmod +x _system/hooks/stop_hook.sh _system/hooks/session_start_hook.sh
+chmod +x _system/hooks/stop_hook.sh _system/hooks/session_start_hook.sh _system/hooks/scripts/sync_git_with_remote.sh
 ```
 
-**Optionnel :** ouvre `_system/hooks/session_start_hook.sh` et modifie la variable `CONTEXT_FILE` (ligne ~14) pour choisir le fichier injecté au démarrage de session. Défaut : `CHANGELOG.md`. Autres options : `README.md`, `TODO.md`, ou n'importe quel autre fichier.
+**Optionnel :** ouvre `_system/hooks/session_start_hook.sh` et modifie la variable `CONTEXT_FILE` (ligne 16) pour choisir le fichier injecté au démarrage de session. Défaut : `CHANGELOG.md`. Autres options : `README.md`, `TODO.md`, ou n'importe quel autre fichier.
 
 ### Étape 3 — Copier les skills
 
@@ -199,6 +202,7 @@ Ajoute au `.gitignore` :
 
 ```
 _system/session_commit_*.txt
+session_error.log
 
 # OpenCode runtime cache/server files — only the plugin is versioned
 .opencode/**

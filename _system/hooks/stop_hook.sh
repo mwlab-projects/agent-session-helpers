@@ -5,31 +5,31 @@
 REPO=$(git rev-parse --show-toplevel 2>/dev/null)
 ERROR_LOG="$REPO/session_error.log"
 
-# Skip if not in a git repo or no session commit prepared
-[ -n "$REPO" ] && ls "$REPO"/_system/session_commit_*.txt >/dev/null 2>&1 || exit 0
+[ -n "$REPO" ] || exit 0
 
-# Lock: every open session fires this hook at the end of its turn, and two runs at the same moment used
-# to process the same commit file twice (duplicate empty commit, then a rejected concurrent push -> false
-# "push failed" alert). One run at a time; a run that waited finds the commit files already processed.
-# The lock is a directory inside .git (mkdir is atomic on every OS, never versioned, shared by all
-# worktrees), removed as soon as the hook exits. A stale lock (owner process gone, or older than 10 min)
-# is taken over. Lock still busy after 45s (SESSION_LOCK_TIMEOUT, used by the tests): the commit files
-# stay in place for the next turn's run.
-LOCK="$(cd "$REPO" && cd "$(git rev-parse --git-common-dir)" && pwd)/session-hooks.lock"
-TRIES=0
-until mkdir "$LOCK" 2>/dev/null; do
-  OWNER=$(cat "$LOCK/pid" 2>/dev/null)
-  if { [ -n "$OWNER" ] && ! kill -0 "$OWNER" 2>/dev/null; } || \
-     [ -n "$(find "$LOCK" -maxdepth 0 -mmin +10 2>/dev/null)" ]; then
-    rm -rf "$LOCK"
-    continue
-  fi
-  [ "$TRIES" -ge $(( ${SESSION_LOCK_TIMEOUT:-45} * 2 )) ] && exit 0
-  sleep 0.5
-  TRIES=$((TRIES + 1))
-done
-echo "$$" > "$LOCK/pid"
-trap 'rm -rf "$LOCK"' EXIT
+# Work to do: a session commit prepared, or a sync conflict whose files an agent has resolved (no conflict
+# marker left in the copies of _system/sync_conflict/; the sync script finalizes it).
+HAS_COMMITS=0
+ls "$REPO"/_system/session_commit_*.txt >/dev/null 2>&1 && HAS_COMMITS=1
+CONFLICT_READY=0
+if [ -f "$REPO/_system/sync_conflict/.sync_conflict_state" ] && \
+   ! grep -rqE --exclude='*.local_version' --exclude='*.remote_version' --exclude='sync_conflict_resolution_instructions.md' \
+     '^(<<<<<<<|>>>>>>>)( |$)' "$REPO/_system/sync_conflict" 2>/dev/null; then
+  CONFLICT_READY=1
+fi
+[ "$HAS_COMMITS" = 1 ] || [ "$CONFLICT_READY" = 1 ] || exit 0
+
+SYNC_LIB="$REPO/_system/hooks/scripts/sync_git_with_remote.sh"
+if [ ! -f "$SYNC_LIB" ]; then
+  printf "Missing %s: session saves are neither committed nor pushed until it is restored.\n\n" "$SYNC_LIB" >> "$ERROR_LOG"
+  exit 0
+fi
+. "$SYNC_LIB"
+
+# Lock (see hooks_lock_acquire): every open session fires this hook at the end of its turn; one run at a time,
+# a run that waited finds the commit files already processed. Still busy after 45s (SESSION_LOCK_TIMEOUT, used by
+# the tests): the commit files stay in place for the next turn's run.
+hooks_lock_acquire "$REPO" "${SESSION_LOCK_TIMEOUT:-45}" || exit 0
 
 for REQ in "$REPO"/_system/session_commit_*.txt; do
   [ -f "$REQ" ] || continue
@@ -37,7 +37,7 @@ for REQ in "$REPO"/_system/session_commit_*.txt; do
   # Split the commit file (format: see prepare_session_commit.sh): file paths, separator line, commit message
   SEP_LINE=$(grep -n -x -m1 -F '=== MESSAGE ===' "$REQ" | cut -d: -f1)
   if [ -z "$SEP_LINE" ]; then
-    printf "Malformed session commit file (no message separator), dropped. Content:\n%s\n" "$(cat "$REQ")" >> "$ERROR_LOG"
+    printf "Malformed session commit file (no message separator), dropped. Content:\n%s\n\n" "$(cat "$REQ")" >> "$ERROR_LOG"
     rm -f "$REQ"
     continue
   fi
@@ -69,7 +69,8 @@ for REQ in "$REPO"/_system/session_commit_*.txt; do
       # files are gitignored, and an agent may list them in its commit scope).
       # Skip silently instead of logging a false add failure.
       git -C "$REPO" check-ignore -q -- "$f" && continue
-      ADD_ERR=$(git -C "$REPO" add -- "$f" 2>&1 >/dev/null)
+      # Retried while another git command (VS Code, an agent) briefly holds the index lock
+      ADD_ERR=$(git_retry_index_lock -C "$REPO" add -- "$f")
       if [ $? -ne 0 ]; then
         # The old side of a `git mv` (rename) is already fully staged as a deletion by the time
         # this loop runs, so `git add -- <old path>` always fails with the exact same "pathspec
@@ -90,64 +91,33 @@ for REQ in "$REPO"/_system/session_commit_*.txt; do
   # Never fail silently: a malformed path must surface via session_error.log instead of just
   # being dropped from the commit.
   if [ -n "$FAILED" ]; then
-    printf "git add failed for these paths (not included in the commit):\n%s" "$FAILED" >> "$ERROR_LOG"
+    printf "git add failed for these paths (not included in the commit):\n%s\n" "$FAILED" >> "$ERROR_LOG"
   fi
 
   # Nothing staged (e.g. session touched no local file) — commit anyway with --allow-empty so the
   # session's summary still lands in git log (history lives entirely in commit messages here).
   # Never risks pulling in unrelated changes: an empty commit stages nothing.
+  # Message passed through a file (not stdin) so that a commit retried after an index lock gets it again
+  MSG_FILE="$(git -C "$REPO" rev-parse --absolute-git-dir)/hub-session-commit-msg.txt"
+  printf '%s\n' "$MESSAGE" > "$MSG_FILE"
   if git -C "$REPO" diff --cached --quiet; then
-    printf '%s\n' "$MESSAGE" | git -C "$REPO" commit --allow-empty -F -
+    git_retry_index_lock -C "$REPO" commit --allow-empty -F "$MSG_FILE"
   else
-    printf '%s\n' "$MESSAGE" | git -C "$REPO" commit -F -
+    git_retry_index_lock -C "$REPO" commit -F "$MSG_FILE"
   fi
+  rm -f "$MSG_FILE"
 
   # Delete the commit file right after its commit — prevents a double commit if the push fails later
   rm -f "$REQ"
 done
 
-# No remote configured (ex. RGPD-conscious local-only hub, no DPA with the git host) —
+# No remote configured (ex. RGPD-conscious local-only repo, no DPA with the git host):
 # nothing to push, the local commit above already succeeded.
 git -C "$REPO" remote get-url origin >/dev/null 2>&1 || exit 0
 
-# Pull with rebase before pushing to handle cases where remote has advanced
-# --autostash: stashes any uncommitted changes before rebasing, restores them after
-# On conflict: abort rebase, skip push, write session_error.log for next session_start to handle
-if git -C "$REPO" fetch origin main > /dev/null 2>&1; then
-  if git -C "$REPO" merge-base --is-ancestor origin/main HEAD 2>/dev/null; then
-    : # origin/main already fully contained in HEAD — nothing to integrate, skip rebase --autostash
-# entirely. Avoids stashing/popping the whole working tree for no reason on every push,
-    # which could desync a concurrent session's in-progress git mv.
-  elif ! git -C "$REPO" rebase --autostash origin/main > /dev/null 2>&1; then
-    git -C "$REPO" rebase --abort > /dev/null 2>&1
-    rm -rf "$REPO/.git/rebase-merge" "$REPO/.git/rebase-apply"
-    echo "Push skipped: pull --rebase failed before push. Local commits not pushed to remote." > "$ERROR_LOG"
-    exit 0
-  fi
-else
-  echo "Push skipped: pull --rebase failed before push. Local commits not pushed to remote." > "$ERROR_LOG"
-  exit 0
-fi
-
-# rebase --autostash exits 0 even when the final autostash re-application conflicts
-# (the rebase itself succeeded; only the stash pop is conflicted). Detect that separately —
-# never leave unmerged (UU) content in the working tree. The stash is left untouched so
-# nothing is lost. The session's own commit above already happened and is unaffected — this
-# only guards against leftover uncommitted state outside the normal commit flow.
-CONFLICTED=$(git -C "$REPO" diff --name-only --diff-filter=U)
-if [ -n "$CONFLICTED" ]; then
-  git -C "$REPO" reset --hard HEAD > /dev/null 2>&1
-  echo "Push skipped: rebase succeeded but autostash re-application conflicted on: $CONFLICTED. Pending state preserved in 'git stash list' (not dropped). Local commits not pushed to remote. Resolve manually next session." > "$ERROR_LOG"
-  exit 0
-fi
-
-# Push — capture output instead of discarding it: a silent failure here (race with a
-# concurrent push, network drop, revoked deploy key...) would otherwise leave the commit
-# stranded local-only with zero trace, discovered only by accident much later.
-PUSH_OUTPUT=$(git -C "$REPO" push 2>&1)
-if [ $? -ne 0 ]; then
-  echo "Push failed after commit: the commit succeeded locally but was not pushed to remote. git output:
-$PUSH_OUTPUT" > "$ERROR_LOG"
-fi
+# Push, integrating origin/main without ever touching other sessions' work (see sync_git_with_remote.sh).
+# The [sync] block of session_error.log always reflects the latest result: removed once the sync succeeds.
+sync_git_with_remote "$REPO"
+sync_log_set "$REPO" sync "$(sync_status_block)"
 
 exit 0

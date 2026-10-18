@@ -1,6 +1,7 @@
 #!/bin/bash
-# SessionStart hook — runs automatically at the beginning of each new Agent session
-# Syncs the repo with origin/main and injects a context file into Claude's context
+# SessionStart hook: runs automatically at the beginning of each new agent session.
+# Syncs the repository with its remote (see sync_git_with_remote.sh), then injects the context: errors to handle,
+# pending sync, context file.
 
 REPO=$(git rev-parse --show-toplevel 2>/dev/null)
 
@@ -8,84 +9,69 @@ REPO=$(git rev-parse --show-toplevel 2>/dev/null)
 [ -n "$REPO" ] || exit 0
 
 ERROR_LOG="$REPO/session_error.log"
+SYNC_LIB="$REPO/_system/hooks/scripts/sync_git_with_remote.sh"
 
 # ── Configure which file to inject as context ──────────────────────────────
 # Default: CHANGELOG.md. Change to README.md or any other file if preferred.
 CONTEXT_FILE="$REPO/CHANGELOG.md"
 # ──────────────────────────────────────────────────────────────────────────
 
-# No remote configured (ex. RGPD-conscious local-only repo, no DPA with the git host) —
-# nothing to sync, skip the whole pull block silently.
+# No remote configured (ex. RGPD-conscious local-only repo, no DPA with the git host):
+# nothing to sync, skip the whole sync block silently.
+SYNC_STATUS=""
 if git -C "$REPO" remote get-url origin >/dev/null 2>&1; then
-
-# Attempt to pull. On conflict: abort rebase cleanly.
-PULL_FAILED=false
-FETCH_OUTPUT=$(git -C "$REPO" fetch origin main 2>&1)
-if git -C "$REPO" merge-base --is-ancestor origin/main HEAD 2>/dev/null; then
-  # origin/main is already fully contained in local HEAD: nothing to rebase.
-  # Skip --autostash entirely — it stashes/pops the whole working tree unconditionally,
-  # even when the rebase itself would be a no-op.
-  PULL_OUTPUT="$FETCH_OUTPUT"
-  PULL_EXIT=0
-else
-  REBASE_OUTPUT=$(git -C "$REPO" rebase --autostash origin/main 2>&1)
-  PULL_EXIT=$?
-  PULL_OUTPUT="$FETCH_OUTPUT
-$REBASE_OUTPUT"
-fi
-if [ $PULL_EXIT -ne 0 ]; then
-  git -C "$REPO" rebase --abort > /dev/null 2>&1
-  rm -rf "$REPO/.git/rebase-merge" "$REPO/.git/rebase-apply"
-  PULL_FAILED=true
-else
-  # rebase --autostash exits 0 even when the final autostash re-application conflicts
-  # (the rebase itself succeeded; only the stash pop is conflicted). Detect that separately —
-  # never leave unmerged (UU) content in the working tree. The stash is left untouched so
-  # nothing is lost.
-  CONFLICTED=$(git -C "$REPO" diff --name-only --diff-filter=U)
-  if [ -n "$CONFLICTED" ]; then
-    git -C "$REPO" reset --hard HEAD > /dev/null 2>&1
-    PULL_OUTPUT="Autostash re-application conflicted on: $CONFLICTED. Session changes preserved in 'git stash list' (not dropped)."
-    PULL_FAILED=true
-  fi
-fi
-
-# A stash left over from a previous session's autostash-pop conflict must never be silently
-# dropped just because THIS session's pull happens to succeed cleanly (nothing local to
-# re-apply this time). Keep flagging it every session until it is actually merged and dropped.
-if ! $PULL_FAILED; then
-  ORPHAN_STASH=$(git -C "$REPO" stash list)
-  if [ -n "$ORPHAN_STASH" ]; then
-    PULL_FAILED=true
-    PULL_OUTPUT="Pull succeeded, but an unresolved stash from a previous session conflict is still present and was never merged:
-$ORPHAN_STASH"
-  fi
-fi
-
-if $PULL_FAILED; then
-  # If stop hook already wrote an error (push skipped), compound the message
-  if [ -f "$ERROR_LOG" ]; then
-    printf "Previous session failed to push AND current pull also failed.\n\ngit output:\n%s" "$PULL_OUTPUT" > "$ERROR_LOG"
+  if [ ! -f "$SYNC_LIB" ]; then
+    grep -qF "$SYNC_LIB" "$ERROR_LOG" 2>/dev/null || \
+      printf "Missing %s: the repository cannot sync until it is restored.\n\n" "$SYNC_LIB" >> "$ERROR_LOG"
   else
-    printf "git pull --rebase failed (exit %s):\n\n%s" "$PULL_EXIT" "$PULL_OUTPUT" > "$ERROR_LOG"
+    . "$SYNC_LIB"
+    # Same lock as the Stop hook. Busy beyond the timeout: another session is syncing right now, skip.
+    if hooks_lock_acquire "$REPO" "${SESSION_START_LOCK_TIMEOUT:-20}"; then
+      # Integrates origin/main, pushes pending local commits (e.g. a save whose push failed) and updates the
+      # folder without touching other sessions' work. The [sync] block of session_error.log reflects the result.
+      sync_git_with_remote "$REPO"
+      sync_log_set "$REPO" sync "$(sync_status_block)"
+      # A stash is work set aside and never merged back: reported at every session until merged and dropped
+      STASHES=$(git -C "$REPO" stash list)
+      sync_log_set "$REPO" stash "${STASHES:+Unresolved stash, never merged back:
+$STASHES}"
+      hooks_lock_release
+    fi
   fi
-else
-  # No pull error: remove error log if it exists
-  rm -f "$ERROR_LOG"
 fi
 
-fi
-
-# If session_error.log exists, inject instruction for Claude — placed before the context
-# file block below: hook stdout is capped at 10,000 chars (truncated beyond that), and this
-# alert must never be the part that gets cut off just because the context file is verbose.
+# If session_error.log exists, inject it with instructions: placed before the context below, because hook
+# stdout is capped at 10,000 chars (truncated beyond that) and this alert must never be the part that gets cut off.
 if [ -f "$ERROR_LOG" ]; then
   echo "=== SESSION_ERROR.LOG START ==="
-  echo "⚠️ REPO SYNC ERROR DETECTED — content of session_error.log:"
+  echo "⚠️ ERREUR DE SYNCHRONISATION DU DÉPÔT - contenu de session_error.log :"
   cat "$ERROR_LOG"
-  echo ""
-  echo "Instructions: run git status, git stash list, git log --oneline -5 HEAD, git log --oneline -5 origin/main. If 'git stash list' is non-empty: run 'git stash show -p' to inspect the pending content — it holds session changes that failed to merge and were never lost. Merge it manually into the current files (never silently pick a side; check with the user if the two versions genuinely conflict in meaning), commit, push, then 'git stash drop' and delete session_error.log. If 'git stash list' is empty: attempt git pull --rebase --autostash. If resolved: git push, delete session_error.log, inform user. If failing: show diverging files, propose options, never ask user to run git commands. Start with: 'Une erreur de synchronisation du repo a été détectée. Je corrige.'"
+  echo "Instructions : commence par « Une erreur de synchronisation du dépôt a été détectée. Je corrige. ». D'autres sessions peuvent avoir du travail en cours dans ce dossier : n'exécute jamais git stash, git reset --hard, git rebase, git pull, git merge ni git checkout -- <fichier> ici."
+  echo "- Bloc [sync] « Sync conflict » : résous les fichiers listés en suivant _system/sync_conflict/sync_conflict_resolution_instructions.md (tu ne modifies que ce dossier). La suite est automatique à la fin de ton tour."
+  echo "- Autres blocs [sync] : ils se mettent à jour seuls à chaque synchro, ne les supprime pas. Corrige la cause si elle est claire et à ta portée (ex. remote mal configuré), puis relance la synchro avec bash _system/hooks/scripts/sync_git_with_remote.sh (sous Codex, elle repart seule à la prochaine sauvegarde) ; sinon informe l'utilisateur en une phrase."
+  echo "- Bloc [stash] : git stash show -p, fusionne ce contenu à la main dans les fichiers actuels (sans jamais choisir un côté en silence), sauvegarde, puis git stash drop."
+  echo "- Autres blocs (ex. « git add failed ») : traite-les, puis retire-les de session_error.log (supprime le fichier s'il ne contient plus rien)."
+  echo "Ne demande jamais à l'utilisateur de lancer des commandes git ; dis-lui en une phrase ce qui a été corrigé."
   echo "=== SESSION_ERROR.LOG END ==="
+  echo ""
+fi
+
+# Remote changes the folder could not take yet (files in progress here that cannot receive them): agents must
+# know before relying on these files. Not an error, nothing for the user to do.
+if [ "$SYNC_STATUS" = deferred ]; then
+  echo "=== SYNCHRO EN ATTENTE START ==="
+  echo "Les dernières modifications du dépôt distant (origin/main) ne sont pas encore dans ce dossier."
+  if [ -n "$SYNC_FILES" ]; then
+    echo "Ces fichiers en cours ici ne peuvent pas encore les recevoir (mêmes lignes modifiées, binaire, ajout ou suppression d'un seul côté) :"
+    printf '%s\n' "$SYNC_FILES" | sed '/^$/d' | head -20 | sed 's/^/- /'
+  else
+    printf '%s\n' "$SYNC_DETAIL" | head -5
+  fi
+  echo "Avant de t'appuyer sur un fichier modifié à distance, consulte aussi sa version distante (git show origin/main:<fichier>). Ne force rien (ni stash, ni reset, ni pull) : le dossier se met à jour seul une fois ces fichiers sauvegardés. Inutile d'en parler à l'utilisateur."
+  case "$SYNC_DETAIL" in
+    *index.lock*) echo "Un fichier .git/index.lock bloque la mise à jour : si aucune commande git ne tourne, supprime-le." ;;
+  esac
+  echo "=== SYNCHRO EN ATTENTE END ==="
   echo ""
 fi
 

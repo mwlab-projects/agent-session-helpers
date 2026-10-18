@@ -15,8 +15,7 @@ export default {
     const controller = new AbortController();
 
     // SessionStart (new session): delegate to session_start_hook.sh - git sync
-    // (fetch/rebase --autostash) + context text generation, in the order defined
-    // by the script itself.
+    // (sync_git_with_remote.sh) + context text generation, in the order defined by the script itself.
     void (async () => {
       try {
         for await (const event of ctx.event.subscribe({ signal: controller.signal })) {
@@ -46,14 +45,19 @@ export default {
       }
     });
 
-    // Stop: run stop_hook.sh (commit + push) as soon as a session commit is prepared. The
+    // Stop: run stop_hook.sh (commit + push) as soon as a session commit is prepared, or while a
+    // sync conflict is open (the hook finalizes it once an agent has resolved its files). The
     // _system folder is checked after every completed tool call, whatever the tool: this never
     // depends on how a given OpenCode version names a tool or its arguments.
     const sysDir = path.join(directory, "_system");
+    const conflictState = path.join(sysDir, "sync_conflict", ".sync_conflict_state");
     await ctx.tool.hook("execute.after", (event) => {
       if (event.status !== "completed") return;
       try {
-        if (!fs.readdirSync(sysDir).some((f) => /^session_commit_.*\.txt$/.test(f))) return;
+        if (
+          !fs.readdirSync(sysDir).some((f) => /^session_commit_.*\.txt$/.test(f)) &&
+          !fs.existsSync(conflictState)
+        ) return;
         execSync(
           `bash "${path.join(directory, "_system/hooks/stop_hook.sh")}"`,
           { cwd: directory, stdio: "ignore" }
