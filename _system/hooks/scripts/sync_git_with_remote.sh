@@ -2,6 +2,7 @@
 # Sync of the repository with its remote (origin/main). Identical in every repository using the session hooks.
 # Sourced by stop_hook.sh, session_start_hook.sh and the system-audit commit script. Can also be run directly
 # (`bash _system/hooks/scripts/sync_git_with_remote.sh`) to retry a sync by hand.
+# Direct run with `--no-files`: no file written in the folder nor .git/info/exclude (no session_error.log, no conflict folder: a true conflict only returns status conflict).
 #
 # Several agent sessions share one working folder. Guarantees:
 #   - uncommitted work is never stashed, reset or lost, and nothing is ever rebased in the folder;
@@ -32,6 +33,7 @@ SYNC_CONFLICT_STATE=".sync_conflict_state"
 SYNC_MERGE_MESSAGE="Sync: merge origin/main (automatic, session hooks)"
 SYNC_RESOLVED_MESSAGE="Sync: merge origin/main (conflict resolved by an agent)"
 SYNC_MARKERS='^(<<<<<<<|>>>>>>>)( |$)'
+SYNC_NO_FILES=0
 
 # ---------------------------------------------------------------- locks and cleanup
 
@@ -563,7 +565,7 @@ sync_git_with_remote() {
     _sync_git rev-parse -q --verify refs/remotes/origin/main >/dev/null || SYNC_NEVER_FETCHED=1
     return 0
   fi
-  _sync_conflict_finalize || return 0
+  if [ "$SYNC_NO_FILES" = 0 ]; then _sync_conflict_finalize || return 0; fi
 
   while :; do
     attempt=$((attempt + 1))
@@ -577,7 +579,7 @@ sync_git_with_remote() {
       _sync_merge "$head" "$origin"
       rc=$?
       if [ "$rc" = 1 ]; then
-        _sync_conflict_prepare "$head" "$origin"
+        [ "$SYNC_NO_FILES" = 1 ] || _sync_conflict_prepare "$head" "$origin"
         SYNC_STATUS=conflict
         return 0
       fi
@@ -640,11 +642,12 @@ sync_status_block() {
 # ---------------------------------------------------------------- direct run
 
 if [ "${BASH_SOURCE[0]}" = "$0" ]; then
+  [ "${1:-}" = --no-files ] && SYNC_NO_FILES=1
   REPO=$(git rev-parse --show-toplevel 2>/dev/null) || { echo "Not inside a git repository."; exit 1; }
   git -C "$REPO" remote get-url origin >/dev/null 2>&1 || { echo "No origin remote: nothing to sync."; exit 0; }
   hooks_lock_acquire "$REPO" 60 || { echo "Another session is syncing: try again in a minute."; exit 1; }
   sync_git_with_remote "$REPO"
-  sync_log_set "$REPO" sync "$(sync_status_block)"
+  [ "$SYNC_NO_FILES" = 1 ] || sync_log_set "$REPO" sync "$(sync_status_block)"
   echo "Sync status: $SYNC_STATUS"
   [ -n "$SYNC_FILES" ] && printf 'Files:\n%s\n' "$SYNC_FILES"
   [ -n "$SYNC_DETAIL" ] && printf 'Detail:\n%s\n' "$SYNC_DETAIL"
