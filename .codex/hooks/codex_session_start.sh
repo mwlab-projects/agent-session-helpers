@@ -5,7 +5,7 @@
 REPO="$(git rev-parse --show-toplevel 2>/dev/null)"
 [ -n "$REPO" ] || { echo '{}'; exit 0; }
 
-CONTEXT=$("$REPO/_system/hooks/session_start_hook.sh")
+CONTEXT=$("$REPO/_system/hooks/harness/session_start_hook.sh")
 
 jq -n --arg ctx "$CONTEXT" '{hookSpecificOutput: {hookEventName: "SessionStart", additionalContext: $ctx}}'
 exit 0

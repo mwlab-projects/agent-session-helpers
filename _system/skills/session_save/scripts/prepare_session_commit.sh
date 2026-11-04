@@ -1,5 +1,5 @@
 #!/bin/bash
-# Prepares the commit of a session for the Stop hook (_system/hooks/stop_hook.sh), which does the
+# Prepares the commit of a session for the Stop hook (_system/hooks/harness/stop_hook.sh), which does the
 # commit and the push. Agents never write the commit file by hand: this script guarantees its format.
 #
 # Usage: prepare_session_commit.sh [file ...] <<'EOF_MSG'

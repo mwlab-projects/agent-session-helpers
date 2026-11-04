@@ -1,7 +1,7 @@
 #!/bin/bash
 # Sync of the repository with its remote (origin/main). Identical in every repository using the session hooks.
 # Sourced by stop_hook.sh, session_start_hook.sh and the system-audit commit script. Can also be run directly
-# (`bash _system/hooks/scripts/sync_git_with_remote.sh`) to retry a sync by hand.
+# (`bash _system/hooks/harness/lib/sync_git_with_remote.sh`) to retry a sync by hand.
 # Direct run with `--no-files`: no file written in the folder nor .git/info/exclude (no session_error.log, no conflict folder: a true conflict only returns status conflict).
 #
 # Several agent sessions share one working folder. Guarantees:

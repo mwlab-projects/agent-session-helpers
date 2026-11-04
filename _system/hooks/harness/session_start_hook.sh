@@ -9,7 +9,7 @@ REPO=$(git rev-parse --show-toplevel 2>/dev/null)
 [ -n "$REPO" ] || exit 0
 
 ERROR_LOG="$REPO/session_error.log"
-SYNC_LIB="$REPO/_system/hooks/scripts/sync_git_with_remote.sh"
+SYNC_LIB="$REPO/_system/hooks/harness/lib/sync_git_with_remote.sh"
 
 # ── Configure which file to inject as context ──────────────────────────────
 # Default: CHANGELOG.md. Change to README.md or any other file if preferred.
@@ -48,7 +48,7 @@ if [ -f "$ERROR_LOG" ]; then
   cat "$ERROR_LOG"
   echo "Instructions : commence par « Une erreur de synchronisation du dépôt a été détectée. Je corrige. ». D'autres sessions peuvent avoir du travail en cours dans ce dossier : n'exécute jamais git stash, git reset --hard, git rebase, git pull, git merge ni git checkout -- <fichier> ici."
   echo "- Bloc [sync] « Sync conflict » : résous les fichiers listés en suivant _system/sync_conflict/sync_conflict_resolution_instructions.md (tu ne modifies que ce dossier). La suite est automatique à la fin de ton tour."
-  echo "- Autres blocs [sync] : ils se mettent à jour seuls à chaque synchro, ne les supprime pas. Corrige la cause si elle est claire et à ta portée (ex. remote mal configuré), puis relance la synchro avec bash _system/hooks/scripts/sync_git_with_remote.sh (sous Codex, elle repart seule à la prochaine sauvegarde) ; sinon informe l'utilisateur en une phrase."
+  echo "- Autres blocs [sync] : ils se mettent à jour seuls à chaque synchro, ne les supprime pas. Corrige la cause si elle est claire et à ta portée (ex. remote mal configuré), puis relance la synchro avec bash _system/hooks/harness/lib/sync_git_with_remote.sh (sous Codex, elle repart seule à la prochaine sauvegarde) ; sinon informe l'utilisateur en une phrase."
   echo "- Bloc [stash] : git stash show -p, fusionne ce contenu à la main dans les fichiers actuels (sans jamais choisir un côté en silence), sauvegarde, puis git stash drop."
   echo "- Autres blocs (ex. « git add failed ») : traite-les, puis retire-les de session_error.log (supprime le fichier s'il ne contient plus rien)."
   echo "Ne demande jamais à l'utilisateur de lancer des commandes git ; dis-lui en une phrase ce qui a été corrigé."

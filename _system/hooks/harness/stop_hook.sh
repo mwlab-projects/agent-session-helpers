@@ -19,7 +19,7 @@ if [ -f "$REPO/_system/sync_conflict/.sync_conflict_state" ] && \
 fi
 [ "$HAS_COMMITS" = 1 ] || [ "$CONFLICT_READY" = 1 ] || exit 0
 
-SYNC_LIB="$REPO/_system/hooks/scripts/sync_git_with_remote.sh"
+SYNC_LIB="$REPO/_system/hooks/harness/lib/sync_git_with_remote.sh"
 if [ ! -f "$SYNC_LIB" ]; then
   printf "Missing %s: session saves are neither committed nor pushed until it is restored.\n\n" "$SYNC_LIB" >> "$ERROR_LOG"
   exit 0

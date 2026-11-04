@@ -25,7 +25,7 @@ export default {
           if (!sessionID || pendingSessionStart.has(sessionID)) continue;
           try {
             const output = execSync(
-              `bash "${path.join(directory, "_system/hooks/session_start_hook.sh")}"`,
+              `bash "${path.join(directory, "_system/hooks/harness/session_start_hook.sh")}"`,
               { cwd: directory, encoding: "utf-8" }
             );
             if (output && output.trim()) pendingSessionStart.set(sessionID, output.trim());
@@ -59,7 +59,7 @@ export default {
           !fs.existsSync(conflictState)
         ) return;
         execSync(
-          `bash "${path.join(directory, "_system/hooks/stop_hook.sh")}"`,
+          `bash "${path.join(directory, "_system/hooks/harness/stop_hook.sh")}"`,
           { cwd: directory, stdio: "ignore" }
         );
       } catch (_) {}

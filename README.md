@@ -8,14 +8,14 @@ Un ensemble de hooks et de skills qui connectent ton harnais IA (Claude Code, Op
 
 | Composant | Rôle |
 |---|---|
-| `_system/hooks/session_start_hook.sh` | Sync git auto au démarrage + injection d'un fichier de contexte (CHANGELOG.md par défaut) |
-| `_system/hooks/stop_hook.sh` | Commit + push auto en fin de session (si `session_save` a préparé un commit), en ne stageant que les fichiers identifiés par le skill comme modifiés dans cette session ; verrou intégré (dossier dans `.git/`) : plusieurs sessions ouvertes dans le même dossier ne commitent/poussent jamais en même temps |
-| `_system/hooks/scripts/sync_git_with_remote.sh` | Synchro git partagée par les deux hooks (fonctionnement détaillé en tête du script) : ne perd jamais le travail des sessions parallèles ouvertes dans le même dossier |
+| `_system/hooks/harness/session_start_hook.sh` | Sync git auto au démarrage + injection d'un fichier de contexte (CHANGELOG.md par défaut) |
+| `_system/hooks/harness/stop_hook.sh` | Commit + push auto en fin de session (si `session_save` a préparé un commit), en ne stageant que les fichiers identifiés par le skill comme modifiés dans cette session ; verrou intégré (dossier dans `.git/`) : plusieurs sessions ouvertes dans le même dossier ne commitent/poussent jamais en même temps |
+| `_system/hooks/harness/lib/sync_git_with_remote.sh` | Synchro git partagée par les deux hooks (fonctionnement détaillé en tête du script) : ne perd jamais le travail des sessions parallèles ouvertes dans le même dossier |
 | `_system/skills/session_save/` | Skill de fin de session : met à jour TODO.md / ARCHITECTURE.md / AGENTS.md / CHANGELOG.md, puis prépare le commit (script `scripts/prepare_session_commit.sh`, un fichier `_system/session_commit_<horodatage>.txt` par sauvegarde, format garanti) |
-| `.claude/hooks`, `.claude/skills` | Symlinks vers `_system/hooks` et `_system/skills` — lus nativement par Claude Code |
+| `.claude/hooks`, `.claude/skills` | Symlinks vers `_system/hooks/harness` et `_system/skills` — lus nativement par Claude Code |
 | `.agents/skills` | Symlink vers `_system/skills` — lu nativement par Codex |
-| `.codex/hooks.json` + `.codex/hooks/*.sh` | Déclaration des hooks Codex (SessionStart, Stop) + wrappers qui traduisent le JSON stdin/stdout attendu par Codex vers les scripts `_system/hooks/*.sh` |
-| `.opencode/plugin/hub-sync.js` | Plugin OpenCode — équivalent fonctionnel des hooks via l'API de plugins JS (`session.created`, `experimental.chat.system.transform`, `tool.execute.after`), appelle les mêmes scripts `_system/hooks/*.sh` |
+| `.codex/hooks.json` + `.codex/hooks/*.sh` | Déclaration des hooks Codex (SessionStart, Stop) + wrappers qui traduisent le JSON stdin/stdout attendu par Codex vers les scripts `_system/hooks/harness/*.sh` |
+| `.opencode/plugin/hub-sync.js` | Plugin OpenCode — équivalent fonctionnel des hooks via l'API de plugins JS (`session.created`, `experimental.chat.system.transform`, `tool.execute.after`), appelle les mêmes scripts `_system/hooks/harness/*.sh` |
 
 **Pourquoi :** un agent IA repart de zéro à chaque session — sans mémoire de ce qui a été fait avant. Ce système injecte automatiquement le contexte du projet au démarrage, maintient les fichiers de documentation à jour via `/session_save`, et commit + push en fin de session sans intervention manuelle — quel que soit le harnais utilisé.
 
@@ -38,24 +38,24 @@ Donne l'URL de cette page à ton agent IA et demande-lui de suivre le guide d'in
 ### Étape 1 — Créer la structure `_system/`
 
 ```bash
-mkdir -p _system/hooks/scripts _system/skills/session_save/scripts
+mkdir -p _system/hooks/harness/lib _system/skills/session_save/scripts
 ```
 
 ### Étape 2 — Récupérer et copier les hooks (source de vérité)
 
 Récupère les deux hooks et leur script de synchro git depuis ce dépôt :
 
-- `https://raw.githubusercontent.com/mwlab-projects/agent-session-helpers/main/_system/hooks/stop_hook.sh` → `_system/hooks/stop_hook.sh`
-- `https://raw.githubusercontent.com/mwlab-projects/agent-session-helpers/main/_system/hooks/session_start_hook.sh` → `_system/hooks/session_start_hook.sh`
-- `https://raw.githubusercontent.com/mwlab-projects/agent-session-helpers/main/_system/hooks/scripts/sync_git_with_remote.sh` → `_system/hooks/scripts/sync_git_with_remote.sh`
+- `https://raw.githubusercontent.com/mwlab-projects/agent-session-helpers/main/_system/hooks/harness/stop_hook.sh` → `_system/hooks/harness/stop_hook.sh`
+- `https://raw.githubusercontent.com/mwlab-projects/agent-session-helpers/main/_system/hooks/harness/session_start_hook.sh` → `_system/hooks/harness/session_start_hook.sh`
+- `https://raw.githubusercontent.com/mwlab-projects/agent-session-helpers/main/_system/hooks/harness/lib/sync_git_with_remote.sh` → `_system/hooks/harness/lib/sync_git_with_remote.sh`
 
 Rends-les exécutables :
 
 ```bash
-chmod +x _system/hooks/stop_hook.sh _system/hooks/session_start_hook.sh _system/hooks/scripts/sync_git_with_remote.sh
+chmod +x _system/hooks/harness/stop_hook.sh _system/hooks/harness/session_start_hook.sh _system/hooks/harness/lib/sync_git_with_remote.sh
 ```
 
-**Optionnel :** ouvre `_system/hooks/session_start_hook.sh` et modifie la variable `CONTEXT_FILE` (ligne 16) pour choisir le fichier injecté au démarrage de session. Défaut : `CHANGELOG.md`. Autres options : `README.md`, `TODO.md`, ou n'importe quel autre fichier.
+**Optionnel :** ouvre `_system/hooks/harness/session_start_hook.sh` et modifie la variable `CONTEXT_FILE` (ligne 16) pour choisir le fichier injecté au démarrage de session. Défaut : `CHANGELOG.md`. Autres options : `README.md`, `TODO.md`, ou n'importe quel autre fichier.
 
 ### Étape 3 — Copier les skills
 
@@ -68,7 +68,7 @@ Récupère et écris :
 
 ```bash
 mkdir -p .claude
-ln -s ../_system/hooks .claude/hooks
+ln -s ../_system/hooks/harness .claude/hooks
 ln -s ../_system/skills .claude/skills
 ```
 

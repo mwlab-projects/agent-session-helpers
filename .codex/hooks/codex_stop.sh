@@ -4,7 +4,7 @@
 
 REPO="$(git rev-parse --show-toplevel 2>/dev/null)"
 if [ -n "$REPO" ]; then
-  "$REPO/_system/hooks/stop_hook.sh"
+  "$REPO/_system/hooks/harness/stop_hook.sh"
 fi
 
 echo '{}'
