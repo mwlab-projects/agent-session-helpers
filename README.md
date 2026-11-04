@@ -12,7 +12,7 @@ Un ensemble de hooks et de skills qui connectent ton harnais IA (Claude Code, Op
 | `_system/hooks/harness/stop_hook.sh` | Commit + push auto en fin de session (si `session_save` a préparé un commit), en ne stageant que les fichiers identifiés par le skill comme modifiés dans cette session ; verrou intégré (dossier dans `.git/`) : plusieurs sessions ouvertes dans le même dossier ne commitent/poussent jamais en même temps |
 | `_system/hooks/harness/lib/sync_git_with_remote.sh` | Synchro git partagée par les deux hooks (fonctionnement détaillé en tête du script) : ne perd jamais le travail des sessions parallèles ouvertes dans le même dossier |
 | `_system/skills/session_save/` | Skill de fin de session : met à jour TODO.md / ARCHITECTURE.md / AGENTS.md / CHANGELOG.md, puis prépare le commit (script `scripts/prepare_session_commit.sh`, un fichier `_system/session_commit_<horodatage>.txt` par sauvegarde, format garanti) |
-| `.claude/hooks`, `.claude/skills` | Symlinks vers `_system/hooks/harness` et `_system/skills` — lus nativement par Claude Code |
+| `.claude/skills` | Symlink vers `_system/skills` — lu nativement par Claude Code (les hooks sont appelés directement dans `_system/hooks/harness/` par `.claude/settings.json`) |
 | `.agents/skills` | Symlink vers `_system/skills` — lu nativement par Codex |
 | `.codex/hooks.json` + `.codex/hooks/*.sh` | Déclaration des hooks Codex (SessionStart, Stop) + wrappers qui traduisent le JSON stdin/stdout attendu par Codex vers les scripts `_system/hooks/harness/*.sh` |
 | `.opencode/plugin/hub-sync.js` | Plugin OpenCode — équivalent fonctionnel des hooks via l'API de plugins JS (`session.created`, `experimental.chat.system.transform`, `tool.execute.after`), appelle les mêmes scripts `_system/hooks/harness/*.sh` |
@@ -68,7 +68,6 @@ Récupère et écris :
 
 ```bash
 mkdir -p .claude
-ln -s ../_system/hooks/harness .claude/hooks
 ln -s ../_system/skills .claude/skills
 ```
 
@@ -215,7 +214,7 @@ Puis commite (en fonction des harnais réellement branchés aux étapes 4-6) :
 ```bash
 git add AGENTS.md ARCHITECTURE.md TODO.md CHANGELOG.md .gitignore \
   _system/hooks _system/skills \
-  .claude/settings.json .claude/hooks .claude/skills \
+  .claude/settings.json .claude/skills \
   .agents/skills .codex .opencode/plugin
 git commit -m "chore: add multi-agent session management (agent-session-helpers)"
 git push
