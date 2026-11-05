@@ -114,6 +114,103 @@ git_retry_index_lock() {
   done
 }
 
+# Index entries of the literal paths "$3..." (files or folders) saved in file $2 before a script stages them, ended
+# by a marker record: index_entries_restore only trusts a complete snapshot. It puts exactly these entries back after
+# a failed commit: what the script staged is unstaged, anything else in the index (another session, the user) is
+# left as is. Returns 1 (and leaves no valid snapshot) if git fails: the caller must then stage nothing.
+INDEX_SNAPSHOT_END="#index-snapshot-end"
+# Empty file object (SHA-1, SHA-256): the object of an intent-to-add entry (git add -N)
+INDEX_EMPTY_BLOBS="e69de29bb2d1d6434b8b29ae775ad8c2e48c5391 473a0f4c3be8a93681a267e3b1e9a7dcda1185436fe141f7749120a303721813"
+index_entries_save() {
+  local repo="$1" file="$2" rec sha p n in_head empty=() deleted=()
+  shift 2
+  rm -f "$file" 2>/dev/null
+  [ -e "$file" ] && return 1
+  : > "$file.tmp" 2>/dev/null || return 1
+  if [ "$#" -gt 0 ]; then
+    git -C "$repo" --literal-pathspecs ls-files -s -z -- "$@" > "$file.tmp" 2>/dev/null || { rm -f "$file.tmp"; return 1; }
+    # An empty-file entry may be intent-to-add: marked "#ita<TAB>path" so that the restore keeps it so (put back as a
+    # plain entry, it would become an empty file staged). One more git call, only in that case. git status shows it as
+    # ".A"; once its file is deleted, as ".D", exactly like an empty file of HEAD deleted from the disk: such a path is
+    # intent-to-add only if HEAD lacks it (one more git call, only in that rarer case).
+    while IFS= read -r -d '' rec; do
+      sha=${rec#* }; sha=${sha%% *}
+      case " $INDEX_EMPTY_BLOBS " in *" $sha "*) empty[${#empty[@]}]="${rec#*$'\t'}" ;; esac
+    done < "$file.tmp"
+    if [ "${#empty[@]}" -gt 0 ]; then
+      GIT_OPTIONAL_LOCKS=0 git -C "$repo" --literal-pathspecs status --porcelain=v2 -z --untracked-files=no -- "${empty[@]}" \
+        > "$file.ita" 2>/dev/null || { rm -f "$file.tmp" "$file.ita"; return 1; }
+      # "1 XY sub mH mI mW hH hI path"
+      while IFS= read -r -d '' rec; do
+        case "$rec" in '1 .A '*|'1 .D '*) ;; *) continue ;; esac
+        n=8; p=$rec; while [ "$n" -gt 0 ]; do p=${p#* }; n=$((n - 1)); done
+        case "$rec" in '1 .A '*) printf '#ita\t%s\0' "$p" ;; *) deleted[${#deleted[@]}]="$p" ;; esac
+      done < "$file.ita" >> "$file.tmp" || { rm -f "$file.tmp" "$file.ita"; return 1; }
+      if [ "${#deleted[@]}" -gt 0 ]; then
+        # Paths HEAD has (none before the first commit: ls-tree fails, nothing listed)
+        git -C "$repo" --literal-pathspecs ls-tree -z --name-only HEAD -- "${deleted[@]}" > "$file.ita" 2>/dev/null
+        for p in "${deleted[@]}"; do
+          in_head=0
+          while IFS= read -r -d '' rec; do [ "$rec" = "$p" ] && in_head=1 && break; done < "$file.ita"
+          [ "$in_head" = 1 ] || printf '#ita\t%s\0' "$p"
+        done >> "$file.tmp" || { rm -f "$file.tmp" "$file.ita"; return 1; }
+      fi
+      rm -f "$file.ita"
+    fi
+  fi
+  printf '%s\0' "$INDEX_SNAPSHOT_END" >> "$file.tmp" 2>/dev/null && mv -f "$file.tmp" "$file" 2>/dev/null && return 0
+  rm -f "$file.tmp" 2>/dev/null
+  return 1
+}
+
+index_entries_restore() {
+  local repo="$1" file="$2" sha path rec last="" i=0 out p is ita=() present=()
+  shift 2
+  [ "$#" -gt 0 ] || { rm -f "$file"; return 0; }
+  # Complete snapshot only (marker as last record), never a truncated one; intent-to-add entries noted
+  if [ -f "$file" ]; then
+    while IFS= read -r -d '' rec; do
+      last="$rec"
+      case "$rec" in '#ita'$'\t'*) ita[${#ita[@]}]="${rec#*$'\t'}" ;; esac
+    done < "$file"
+  fi
+  if [ "$last" != "$INDEX_SNAPSHOT_END" ]; then
+    rm -f "$file"
+    echo "index snapshot missing or incomplete: index left as is"
+    return 1
+  fi
+  # One update-index run: mode 0 removes the current entries of these paths (each with its own object name, read
+  # from "<mode> <sha> <stage>\t<path>": right length in SHA-1 and SHA-256 repositories), then the saved ones come back
+  git -C "$repo" --literal-pathspecs ls-files -s -z -- "$@" > "$file.cur" || { rm -f "$file" "$file.cur"; echo "git ls-files failed"; return 1; }
+  { while IFS= read -r -d '' rec; do
+      path=${rec#*$'\t'}; sha=${rec#* }; sha=${sha%% *}
+      printf '0 %s\t%s\0' "$sha" "$path"
+    done < "$file.cur"
+    # Saved entries, except the markers and the intent-to-add ones (added back below with git add -N)
+    while IFS= read -r -d '' rec; do
+      case "$rec" in "$INDEX_SNAPSHOT_END"|'#ita'$'\t'*) continue ;; esac
+      path=${rec#*$'\t'} is=0
+      for p in ${ita[@]+"${ita[@]}"}; do [ "$p" = "$path" ] && is=1 && break; done
+      [ "$is" = 1 ] || printf '%s\0' "$rec"
+    done < "$file"
+  } > "$file.in"
+  while :; do
+    out=$(git -C "$repo" update-index -z --index-info < "$file.in" 2>&1) && break
+    case "$out" in *index.lock*) [ "$i" -lt 40 ] && { i=$((i + 1)); sleep 0.25; continue; } ;; esac
+    rm -f "$file" "$file.in" "$file.cur"
+    printf '%s\n' "$out"
+    return 1
+  done
+  rm -f "$file" "$file.in" "$file.cur"
+  # Intent-to-add entries put back with git add -N, which needs the file: one deleted since stays out of the index
+  # (an intent to add a file that no longer exists; never an empty file staged)
+  for p in ${ita[@]+"${ita[@]}"}; do [ -e "$repo/$p" ] && present[${#present[@]}]="$p"; done
+  if [ "${#present[@]}" -gt 0 ]; then
+    out=$(git -C "$repo" --literal-pathspecs add -N -- "${present[@]}" 2>&1) || { printf '%s\n' "$out"; return 1; }
+  fi
+  return 0
+}
+
 # ---------------------------------------------------------------- helpers
 
 _sync_git() { git -C "$SYNC_REPO" "$@"; }
@@ -604,13 +701,15 @@ sync_git_with_remote() {
 # current state: each call replaces the previous block of that tag ("" removes it). Other blocks (e.g. a failed
 # git add) stay until an agent has handled them.
 sync_log_set() {
-  local log="$1/session_error.log" tmp gd
+  local log="$1/session_error.log" tmp gd ok=1
   gd=$(git -C "$1" rev-parse --absolute-git-dir 2>/dev/null) || return 0
   tmp="$gd/session_error.log.tmp"
   {
-    [ -f "$log" ] && awk -v tag="[$2]" 'BEGIN { RS = ""; ORS = "\n\n" } index($0, tag) != 1' "$log"
-    [ -n "$3" ] && printf '[%s] %s\n\n' "$2" "$(printf '%s\n' "$3" | sed '/^[[:space:]]*$/d')"
-  } > "$tmp"
+    if [ -f "$log" ]; then awk -v tag="[$2]" 'BEGIN { RS = ""; ORS = "\n\n" } index($0, tag) != 1' "$log" || ok=0; fi
+    if [ -n "$3" ]; then printf '[%s] %s\n\n' "$2" "$(printf '%s\n' "$3" | sed '/^[[:space:]]*$/d')" || ok=0; fi
+  } > "$tmp" 2>/dev/null || ok=0
+  # Temporary file not written (full disk...): the log is left as it is, never deleted
+  [ "$ok" = 1 ] || { rm -f "$tmp" 2>/dev/null; return 0; }
   if [ -s "$tmp" ]; then mv -f "$tmp" "$log"; else rm -f "$tmp" "$log"; fi
 }
 

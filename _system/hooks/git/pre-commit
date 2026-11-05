@@ -1,0 +1,10 @@
+#!/bin/bash
+# Git pre-commit hook (core.hooksPath = _system/hooks/git, set by the session start hook): refuses a commit holding
+# a file over the size limit without a pass line in .gitattributes. Rule, limit and message: large_file_check.sh. Merge commits:
+# pre-merge-commit (limits listed there).
+HOOK_DIR=$(cd "$(dirname "$0")" && pwd)
+if [ ! -f "$HOOK_DIR/large_file_check.sh" ]; then
+  echo "Missing $HOOK_DIR/large_file_check.sh: commits are refused until it is restored." >&2
+  exit 1
+fi
+exec bash "$HOOK_DIR/large_file_check.sh" --staged

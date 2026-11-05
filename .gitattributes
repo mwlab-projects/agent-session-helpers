@@ -1,0 +1,6 @@
+# Format Mac/Linux imposé aux scripts, pour qu'ils tournent aussi sous Windows
+*.sh text eol=lf
+_system/hooks/git/pre-commit text eol=lf
+_system/hooks/git/pre-merge-commit text eol=lf
+
+# Fichiers volumineux acceptés dans la sauvegarde

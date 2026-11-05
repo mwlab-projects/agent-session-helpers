@@ -40,18 +40,30 @@ $STASHES}"
   fi
 fi
 
+# Git hooks of the repository (e.g. pre-commit large file check): activated only where _system/hooks/git/ exists,
+# after the sync so that a folder just received is active at once. Silent, never blocks the start.
+# core.hooksPath replaces .git/hooks entirely: hooks installed there (or a hooksPath set by another tool, e.g. husky)
+# no longer run; a repository needing them must call them from _system/hooks/git/.
+GIT_HOOKS_PATH="_system/hooks/git"
+if [ -d "$REPO/$GIT_HOOKS_PATH" ] && [ "$(git -C "$REPO" config --get core.hooksPath 2>/dev/null)" != "$GIT_HOOKS_PATH" ]; then
+  git -C "$REPO" config --replace-all core.hooksPath "$GIT_HOOKS_PATH" >/dev/null 2>&1
+fi
+
 # If session_error.log exists, inject it with instructions: placed before the context below, because hook
 # stdout is capped at 10,000 chars (truncated beyond that) and this alert must never be the part that gets cut off.
+# The instructions come before the content of the log, which may be long (refused saves): only its end can be cut.
 if [ -f "$ERROR_LOG" ]; then
   echo "=== SESSION_ERROR.LOG START ==="
   echo "⚠️ ERREUR DE SYNCHRONISATION DU DÉPÔT - contenu de session_error.log :"
-  cat "$ERROR_LOG"
   echo "Instructions : commence par « Une erreur de synchronisation du dépôt a été détectée. Je corrige. ». D'autres sessions peuvent avoir du travail en cours dans ce dossier : n'exécute jamais git stash, git reset --hard, git rebase, git pull, git merge ni git checkout -- <fichier> ici."
   echo "- Bloc [sync] « Sync conflict » : résous les fichiers listés en suivant _system/sync_conflict/sync_conflict_resolution_instructions.md (tu ne modifies que ce dossier). La suite est automatique à la fin de ton tour."
   echo "- Autres blocs [sync] : ils se mettent à jour seuls à chaque synchro, ne les supprime pas. Corrige la cause si elle est claire et à ta portée (ex. remote mal configuré), puis relance la synchro avec bash _system/hooks/harness/lib/sync_git_with_remote.sh (sous Codex, elle repart seule à la prochaine sauvegarde) ; sinon informe l'utilisateur en une phrase."
   echo "- Bloc [stash] : git stash show -p, fusionne ce contenu à la main dans les fichiers actuels (sans jamais choisir un côté en silence), sauvegarde, puis git stash drop."
+  echo "- [save …] block (refused save, summary kept): apply the instructions it points to, then stage the modified files with git add; do not save again or remove the block: the save is committed automatically and its block disappears."
   echo "- Autres blocs (ex. « git add failed ») : traite-les, puis retire-les de session_error.log (supprime le fichier s'il ne contient plus rien)."
   echo "Ne demande jamais à l'utilisateur de lancer des commandes git ; dis-lui en une phrase ce qui a été corrigé."
+  echo "Content of session_error.log:"
+  cat "$ERROR_LOG"
   echo "=== SESSION_ERROR.LOG END ==="
   echo ""
 fi

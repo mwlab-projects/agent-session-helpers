@@ -1,0 +1,12 @@
+#!/bin/bash
+# Git pre-merge-commit hook (git >= 2.24): same large file check as pre-commit for a merge commit made by git merge
+# without conflict (a merge with conflicts is concluded by git commit, which runs pre-commit).
+# Remaining limits, checked with git 2.50: git cherry-pick, git revert and git rebase run neither hook, git commit
+# --no-verify skips both; the sync of the session hooks merges with git commit-tree (no hook: the remote commits were
+# checked on the machine that made them).
+HOOK_DIR=$(cd "$(dirname "$0")" && pwd)
+if [ ! -f "$HOOK_DIR/large_file_check.sh" ]; then
+  echo "Missing $HOOK_DIR/large_file_check.sh: merge commits are refused until it is restored." >&2
+  exit 1
+fi
+exec bash "$HOOK_DIR/large_file_check.sh" --staged

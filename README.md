@@ -8,9 +8,13 @@ Un ensemble de hooks et de skills qui connectent ton harnais IA (Claude Code, Op
 
 | Composant | Rôle |
 |---|---|
-| `_system/hooks/harness/session_start_hook.sh` | Sync git auto au démarrage + injection d'un fichier de contexte (CHANGELOG.md par défaut) |
-| `_system/hooks/harness/stop_hook.sh` | Commit + push auto en fin de session (si `session_save` a préparé un commit), en ne stageant que les fichiers identifiés par le skill comme modifiés dans cette session ; verrou intégré (dossier dans `.git/`) : plusieurs sessions ouvertes dans le même dossier ne commitent/poussent jamais en même temps |
+| `_system/hooks/harness/session_start_hook.sh` | Sync git auto au démarrage + injection d'un fichier de contexte (CHANGELOG.md par défaut) ; active les hooks git de `_system/hooks/git/` (`core.hooksPath`) |
+| `_system/hooks/harness/stop_hook.sh` | Commit + push auto en fin de session (si `session_save` a préparé un commit), en ne stageant que les fichiers identifiés par le skill comme modifiés dans cette session ; verrou intégré (dossier dans `.git/`) : plusieurs sessions ouvertes dans le même dossier ne commitent/poussent jamais en même temps ; une sauvegarde refusée est conservée, signalée dans `session_error.log`, puis enregistrée automatiquement une fois la cause corrigée |
 | `_system/hooks/harness/lib/sync_git_with_remote.sh` | Synchro git partagée par les deux hooks (fonctionnement détaillé en tête du script) : ne perd jamais le travail des sessions parallèles ouvertes dans le même dossier |
+| `_system/hooks/harness/lib/commit_check_lib.sh` | Contrôle des fichiers volumineux partagé par les hooks git et la sauvegarde de session |
+| `_system/hooks/git/` | Hooks git `pre-commit` et `pre-merge-commit` : refusent un commit qui contient un fichier volumineux (règle, seuil et exceptions dans `large_file_check.sh`) ; consigne affichée à l'agent en cas de refus dans `messages/large_file_message.md` |
+| `.gitattributes` | Fins de ligne LF forcées pour les scripts (sinon bash échoue sous Windows) ; reçoit aussi les laissez-passer des fichiers volumineux |
+| `data/` (ignoré par git) | Dossier où ranger les fichiers volumineux refusés au commit |
 | `_system/skills/session_save/` | Skill de fin de session : met à jour TODO.md / ARCHITECTURE.md / AGENTS.md / CHANGELOG.md, puis prépare le commit (script `scripts/prepare_session_commit.sh`, un fichier `_system/session_commit_<horodatage>.txt` par sauvegarde, format garanti) |
 | `.claude/skills` | Symlink vers `_system/skills` — lu nativement par Claude Code (les hooks sont appelés directement dans `_system/hooks/harness/` par `.claude/settings.json`) |
 | `.agents/skills` | Symlink vers `_system/skills` — lu nativement par Codex |
@@ -38,22 +42,37 @@ Donne l'URL de cette page à ton agent IA et demande-lui de suivre le guide d'in
 ### Étape 1 — Créer la structure `_system/`
 
 ```bash
-mkdir -p _system/hooks/harness/lib _system/skills/session_save/scripts
+mkdir -p _system/hooks/harness/lib _system/hooks/git/messages _system/skills/session_save/scripts
 ```
 
 ### Étape 2 — Récupérer et copier les hooks (source de vérité)
 
-Récupère les deux hooks et leur script de synchro git depuis ce dépôt :
+Récupère les deux hooks de session, leurs scripts partagés et les hooks git depuis ce dépôt :
 
 - `https://raw.githubusercontent.com/mwlab-projects/agent-session-helpers/main/_system/hooks/harness/stop_hook.sh` → `_system/hooks/harness/stop_hook.sh`
 - `https://raw.githubusercontent.com/mwlab-projects/agent-session-helpers/main/_system/hooks/harness/session_start_hook.sh` → `_system/hooks/harness/session_start_hook.sh`
 - `https://raw.githubusercontent.com/mwlab-projects/agent-session-helpers/main/_system/hooks/harness/lib/sync_git_with_remote.sh` → `_system/hooks/harness/lib/sync_git_with_remote.sh`
+- `https://raw.githubusercontent.com/mwlab-projects/agent-session-helpers/main/_system/hooks/harness/lib/commit_check_lib.sh` → `_system/hooks/harness/lib/commit_check_lib.sh`
+- `https://raw.githubusercontent.com/mwlab-projects/agent-session-helpers/main/_system/hooks/git/pre-commit` → `_system/hooks/git/pre-commit`
+- `https://raw.githubusercontent.com/mwlab-projects/agent-session-helpers/main/_system/hooks/git/pre-merge-commit` → `_system/hooks/git/pre-merge-commit`
+- `https://raw.githubusercontent.com/mwlab-projects/agent-session-helpers/main/_system/hooks/git/large_file_check.sh` → `_system/hooks/git/large_file_check.sh`
+- `https://raw.githubusercontent.com/mwlab-projects/agent-session-helpers/main/_system/hooks/git/messages/large_file_message.md` → `_system/hooks/git/messages/large_file_message.md`
+- `https://raw.githubusercontent.com/mwlab-projects/agent-session-helpers/main/.gitattributes` → `.gitattributes` (si le projet en a déjà un, y ajouter son contenu)
 
 Rends-les exécutables :
 
 ```bash
-chmod +x _system/hooks/harness/stop_hook.sh _system/hooks/harness/session_start_hook.sh _system/hooks/harness/lib/sync_git_with_remote.sh
+chmod +x _system/hooks/harness/stop_hook.sh _system/hooks/harness/session_start_hook.sh _system/hooks/harness/lib/sync_git_with_remote.sh _system/hooks/git/pre-commit _system/hooks/git/pre-merge-commit _system/hooks/git/large_file_check.sh
 ```
+
+Ajoute au `.gitignore` du projet (dossier où ranger les fichiers volumineux refusés au commit) :
+
+```
+# Fichiers hors git (dossier data/ à la racine uniquement)
+/data/
+```
+
+Les hooks git s'activent tout seuls au prochain démarrage de session (`core.hooksPath` réglé par `session_start_hook.sh`). Si le projet utilise déjà des hooks git (`.git/hooks`, husky...), ils ne seront plus appelés : à signaler à l'utilisateur avant l'installation.
 
 **Optionnel :** ouvre `_system/hooks/harness/session_start_hook.sh` et modifie la variable `CONTEXT_FILE` (ligne 16) pour choisir le fichier injecté au démarrage de session. Défaut : `CHANGELOG.md`. Autres options : `README.md`, `TODO.md`, ou n'importe quel autre fichier.
 

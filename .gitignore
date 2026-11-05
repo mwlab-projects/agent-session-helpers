@@ -6,3 +6,6 @@ _system/session_commit_*.txt
 .opencode/**
 !.opencode/plugin/
 !.opencode/plugin/**
+
+# Fichiers hors git (dossier data/ à la racine uniquement)
+/data/
