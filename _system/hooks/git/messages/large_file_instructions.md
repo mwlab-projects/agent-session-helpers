@@ -5,7 +5,7 @@ Pour chaque fichier, suivre ces étapes :
 1) Évaluer la recommandation à faire :
     - Laisser le fichier en place et le conserver dans git : s'il est nécessaire à cet emplacement pour qu'un système fonctionne (ex. une image chargée par une application, un modèle utilisé par un skill)
     - Sinon, le ranger dans le dossier data/ (non suivi par git) à la racine du dépôt
-    - Dans tous les cas, choisir le dossier de data/ où il pourrait aller ([DOSSIER]) : suivre l'organisation déjà en place dans data/ (dossier existant pertinent, ou nouveau dossier cohérent avec les existants) ; si data/ ne contient aucun dossier, proposer par défaut `data/<catégorie>/<année>/` (ex. data/factures/2026/)
+    - Dans tous les cas, choisir le dossier de data/ où il pourrait aller ([DOSSIER]) : suivre l'organisation déjà en place dans data/ (dossier existant pertinent, ou nouveau dossier cohérent avec les existants) ; si data/ ne contient aucun dossier, proposer par défaut `data/<Catégorie>/<année>/` (ex. data/Factures/2026/)
 
 2) Afficher exactement le message ci-dessous, puis attendre la réponse de l'utilisateur :
     ```
