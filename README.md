@@ -12,7 +12,7 @@ Un ensemble de hooks et de skills qui connectent ton harnais IA (Claude Code, Op
 | `_system/hooks/harness/stop_hook.sh` | Commit + push auto en fin de session (si `session_save` a préparé un commit), en ne stageant que les fichiers identifiés par le skill comme modifiés dans cette session ; verrou intégré (dossier dans `.git/`) : plusieurs sessions ouvertes dans le même dossier ne commitent/poussent jamais en même temps ; une sauvegarde refusée est conservée, signalée dans `session_error.log`, puis enregistrée automatiquement une fois la cause corrigée |
 | `_system/hooks/harness/lib/sync_git_with_remote.sh` | Synchro git partagée par les deux hooks (fonctionnement détaillé en tête du script) : ne perd jamais le travail des sessions parallèles ouvertes dans le même dossier |
 | `_system/hooks/harness/lib/commit_check_lib.sh` | Contrôle des fichiers volumineux partagé par les hooks git et la sauvegarde de session |
-| `_system/hooks/git/` | Hooks git `pre-commit` et `pre-merge-commit` : refusent un commit qui contient un fichier volumineux (règle, seuil et exceptions dans `large_file_check.sh`) ; consigne affichée à l'agent en cas de refus dans `messages/large_file_instructions.md` |
+| `_system/hooks/git/` | Hooks git `pre-commit` et `pre-merge-commit` : refusent un commit qui contient un fichier volumineux (règle, seuil et exceptions dans `large_file_check.sh`) ; consigne affichée à l'agent en cas de refus dans `instructions/large_file_instructions.md` |
 | `.gitattributes` | Fins de ligne LF forcées pour les scripts (sinon bash échoue sous Windows) ; reçoit aussi les laissez-passer des fichiers volumineux |
 | `data/` (ignoré par git) | Dossier où ranger les fichiers volumineux refusés au commit |
 | `_system/skills/session_save/` | Skill de fin de session : met à jour TODO.md / ARCHITECTURE.md / AGENTS.md / CHANGELOG.md, puis prépare le commit (script `scripts/prepare_session_commit.sh`, un fichier `_system/session_commit_<horodatage>.txt` par sauvegarde, format garanti) |
@@ -42,7 +42,7 @@ Donne l'URL de cette page à ton agent IA et demande-lui de suivre le guide d'in
 ### Étape 1 — Créer la structure `_system/`
 
 ```bash
-mkdir -p _system/hooks/harness/lib _system/hooks/git/messages _system/skills/session_save/scripts
+mkdir -p _system/hooks/harness/lib _system/hooks/git/instructions _system/skills/session_save/scripts
 ```
 
 ### Étape 2 — Récupérer et copier les hooks (source de vérité)
@@ -56,7 +56,7 @@ Récupère les deux hooks de session, leurs scripts partagés et les hooks git d
 - `https://raw.githubusercontent.com/mwlab-projects/agent-session-helpers/main/_system/hooks/git/pre-commit` → `_system/hooks/git/pre-commit`
 - `https://raw.githubusercontent.com/mwlab-projects/agent-session-helpers/main/_system/hooks/git/pre-merge-commit` → `_system/hooks/git/pre-merge-commit`
 - `https://raw.githubusercontent.com/mwlab-projects/agent-session-helpers/main/_system/hooks/git/large_file_check.sh` → `_system/hooks/git/large_file_check.sh`
-- `https://raw.githubusercontent.com/mwlab-projects/agent-session-helpers/main/_system/hooks/git/messages/large_file_instructions.md` → `_system/hooks/git/messages/large_file_instructions.md`
+- `https://raw.githubusercontent.com/mwlab-projects/agent-session-helpers/main/_system/hooks/git/instructions/large_file_instructions.md` → `_system/hooks/git/instructions/large_file_instructions.md`
 - `https://raw.githubusercontent.com/mwlab-projects/agent-session-helpers/main/.gitattributes` → `.gitattributes` (si le projet en a déjà un, y ajouter son contenu)
 
 Rends-les exécutables :
