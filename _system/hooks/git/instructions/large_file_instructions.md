@@ -15,8 +15,10 @@ Inclure le texte ci-dessous (une ligne de tableau par fichier), puis attendre la
     | [N°] | [NOM DU FICHIER (sans chemin)] | [TAILLE] Mo | **[Numéro choix] - [Action]** : [raison courte sans jargon] |
 
     Que décides-tu ? 
-    (Choix possibles : 
-    **1.** Stocker le(s) fichier(s) dans `data/` (prévu à cet effet) · **2.** Ignorer la limite de taille et sauvegarder · **3.** Le(s) déplacer ailleurs (Google Drive, Dropbox...))
+    Choix possibles :
+    - **1.** Stocker le(s) fichier(s) dans `data/` (prévu à cet effet, mais non sauvegardé)
+    - **2.** Ignorer la limite de taille et sauvegarder
+    - **3.** Le(s) déplacer ailleurs (Google Drive, Dropbox...)
     ```
 
     Règles :
