@@ -49,7 +49,7 @@ HOOK_CHECKS_LARGE_FILES=0
 [ -f "$LARGE_FILE_CHECK" ] && [ "$PRE_COMMIT_HOOK" -ef "$REPO/_system/hooks/git/pre-commit" ] && [ -x "$PRE_COMMIT_HOOK" ] &&
   HOOK_CHECKS_LARGE_FILES=1
 # Pointer added to a large file refusal in session_error.log (block of values only there, instructions in the file)
-LARGE_FILE_HINT="Full instructions: _system/hooks/git/messages/large_file_message.md; stage the files modified while applying them (updated links, .gitattributes) with git add instead of saving again."
+LARGE_FILE_HINT="Full instructions: _system/hooks/git/messages/large_file_instructions.md; stage the files modified while applying them (updated links, .gitattributes) with git add instead of saving again."
 # One state file per refused save (see refusal_unchanged), next to the index snapshot
 REFUSED_DIR="$GIT_DIR_ABS/hub-session-refused"
 # A refused save is tried again anyway after this delay (transient causes: full disk, lock...)

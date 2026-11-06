@@ -19,7 +19,7 @@ LFC_MAX_BYTES=1000000
 #      commit_check_lib.sh), one entry per refused file: path, size and limit (MB: decimal, one decimal rounded up,
 #      decimal comma), .gitattributes pass line, command removing it from the index, .gitignore line (root .gitignore
 #      only, a tracked file must also be removed with the command; "none possible" for a name with a line break);
-#   2) then messages/large_file_message.md, the instructions for the agent: entirely free text, printed as it is
+#   2) then messages/large_file_instructions.md, the instructions for the agent: entirely free text, printed as it is
 #      (only CRLF line endings turned into LF); the script replaces nothing in it. Missing: the block is still shown,
 #      followed by a line naming the missing file.
 # In session_error.log (--compact) only the block is written; stop_hook.sh adds the path of the instructions.
@@ -40,7 +40,7 @@ LFC_MAX_BYTES=1000000
 # needs git >= 2.24. Uses no find/xargs/wc/stat: same behaviour with Git Bash (Windows), GNU and BSD tools.
 
 LFC_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-LFC_MESSAGE="$LFC_DIR/messages/large_file_message.md"
+LFC_MESSAGE="$LFC_DIR/messages/large_file_instructions.md"
 LFC_LIB="$LFC_DIR/../harness/lib/commit_check_lib.sh"
 
 # Absolute form of a path printed by git (relative to the folder the script started in, or already absolute, also
